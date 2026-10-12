@@ -1,6 +1,6 @@
 'use server';
 
-import { getCandles } from './finnhub.actions';
+import { getDailyCandles } from './alpaca.actions';
 import { computeAll } from '../indicators';
 import { computeFactors } from '../indicators/factors';
 import { computeVariants } from '../indicators/variants';
@@ -16,7 +16,7 @@ import type {
   IDSPeriodResult,
 } from '../indicators/ids';
 
-/** 1-hour cache is inherited from getCandles' fetchJSON(url, 3600). */
+/** 1 小時快取由統一入口 getDailyCandles 繼承。 */
 export interface IndicatorAssessment {
   results: IndicatorResult[];
   ids: IDSResult;
@@ -49,9 +49,10 @@ function toCandles(raw: {
 export type AssessmentFailureReason = 'crypto' | 'api-error' | 'insufficient-data';
 
 /**
- * 57-indicator vote + IDS assessment for a US stock symbol.
- * Returns null (never throws) when: symbol is CoinGecko-prefixed (CG:...),
- * there is no usable candle data, or fewer than 60 candles are available.
+ * 57-indicator vote + IDS assessment for a US stock or CoinGecko crypto symbol.
+ * CG: 幣種走統一入口（CoinGecko 查 symbol → Alpaca 幣 K 線）。
+ * Returns null (never throws) when: there is no usable candle data,
+ * or fewer than 60 candles are available.
  */
 export async function getIndicatorAssessment(
   symbol: string,
@@ -68,19 +69,24 @@ export async function getIndicatorAssessmentWithReason(
   symbol: string,
 ): Promise<{ assessment: IndicatorAssessment | null; reason: AssessmentFailureReason | null }> {
   try {
-    // Crypto prices come from CoinGecko, not Finnhub: no candle data available.
-    if (!symbol || symbol.startsWith('CG:')) return { assessment: null, reason: 'crypto' };
+    if (!symbol) return { assessment: null, reason: 'api-error' };
 
     // days=400 guarantees 250+ trading days for SMA200 after holidays/gaps.
+    // 統一入口：美股走 Alpaca（Finnhub 備援）；CG: 幣種走 CoinGecko 查 symbol → Alpaca。
     const [symR, spyR] = await Promise.allSettled([
-      getCandles(symbol, 'D', 400),
-      getCandles('SPY', 'D', 400),
+      getDailyCandles(symbol, 400),
+      getDailyCandles('SPY', 400),
     ]);
 
     const raw = symR.status === 'fulfilled' ? symR.value : null;
     if (!raw || !Array.isArray(raw.c) || raw.c.length === 0) {
       console.error(`[indicators] candle API failed for ${symbol}: no usable response`);
-      return { assessment: null, reason: 'api-error' };
+      // 幣種無資料（無法對應或 Alpaca 無此幣）→ 'crypto'；
+      // 美股無資料（Alpaca＋Finnhub 皆失敗）→ 'api-error'。
+      return {
+        assessment: null,
+        reason: symbol.toUpperCase().startsWith('CG:') ? 'crypto' : 'api-error',
+      };
     }
     if (raw.c.length < 60) {
       return { assessment: null, reason: 'insufficient-data' };
@@ -129,20 +135,20 @@ export interface FactorAssessment {
 const VARIANT_INDICATORS: VariantIndicatorId[] = ['RSI', 'ADX_DMI', 'CMF', 'ATR'];
 
 /**
- * Four-factor (T/M/V/R) + variant + IDS assessment for a US stock symbol.
- * Returns null (never throws) when: symbol is CoinGecko-prefixed (CG:...),
- * there is no usable candle data, or fewer than 60 candles are available.
- * 1-hour cache is inherited from getCandles' fetchJSON(url, 3600).
+ * Four-factor (T/M/V/R) + variant + IDS assessment for a US stock or CoinGecko crypto symbol.
+ * Returns null (never throws) when: there is no usable candle data,
+ * or fewer than 60 candles are available.
+ * 1 小時快取由統一入口 getDailyCandles 繼承。
  */
 export async function getFactorAssessment(
   symbol: string,
 ): Promise<FactorAssessment | null> {
   try {
-    // Crypto prices come from CoinGecko, not Finnhub: no candle data available.
-    if (!symbol || symbol.startsWith('CG:')) return null;
+    if (!symbol) return null;
 
     // days=400 gives R the longest possible ATR% history (up to 252 closes).
-    const raw = await getCandles(symbol, 'D', 400);
+    // 統一入口：美股走 Alpaca（Finnhub 備援）；CG: 幣種走 CoinGecko 查 symbol → Alpaca。
+    const raw = await getDailyCandles(symbol, 400);
     if (!raw || !Array.isArray(raw.c) || raw.c.length < 60) return null;
 
     const candles = toCandles(raw);

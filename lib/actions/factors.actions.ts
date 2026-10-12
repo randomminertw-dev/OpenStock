@@ -1,7 +1,8 @@
 'use server';
 
 import { cache } from 'react';
-import { getCandles, getNews } from './finnhub.actions';
+import { getDailyCandles } from './alpaca.actions';
+import { getNews } from './finnhub.actions';
 import { buildAssessment, type FactorAssessment } from '@/lib/factors/scoring';
 
 // Technical indicators need enough history (SMA50 + MACD + RSI + Bollinger);
@@ -11,12 +12,11 @@ const MIN_CANDLES = 60;
 async function fetchFactorAssessment(symbol: string): Promise<FactorAssessment | null> {
     const clean = (symbol || '').trim().toUpperCase();
     if (!clean) return null;
-    // CoinGecko coins: Finnhub has no candles or company news for them;
-    // skip rather than scoring them on general market news.
+    // 舊面板政策：幣種不進評分（Finnhub 無幣種公司新聞，不拿一般市場新聞評分）。
     if (clean.startsWith('CG:')) return null;
 
     const [candlesResult, newsResult] = await Promise.allSettled([
-        getCandles(clean),
+        getDailyCandles(clean, 120),
         getNews([clean]),
     ]);
 

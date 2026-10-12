@@ -208,7 +208,7 @@ export default async function IndicatorDashboard({ symbol }: { symbol: string })
             reason === 'api-error'
                 ? '行情資料服務暫時無法連線，請稍後再回來看看。'
                 : reason === 'crypto'
-                  ? '加密貨幣目前不支援技術指標分析。'
+                  ? '該幣種目前無技術指標資料。'
                   : '目前沒有足夠的日 K 線資料計算 57 項技術指標（至少需要 60 根），稍後再回來看看。';
         return (
             <div className="empty-state py-10">
