@@ -1,12 +1,6 @@
-// Community links, used across the app, landing page and emails
-export const REPO_URL = 'https://github.com/Open-Dev-Society/OpenStock';
-// GitHub account that receives sponsorships. Switch to 'Open-Dev-Society' once the org's
-// GitHub Sponsors listing is live (github.com/sponsors/Open-Dev-Society); every link follows.
-export const SPONSOR_GITHUB_ACCOUNT = 'ravixalgorithm';
-export const SPONSOR_URL = `https://github.com/sponsors/${SPONSOR_GITHUB_ACCOUNT}`;
-// Opens GitHub's checkout with the amount and frequency already picked
-export const sponsorCheckoutUrl = (amount?: number, frequency: 'recurring' | 'one-time' = 'recurring') =>
-    `${SPONSOR_URL}/sponsorships?frequency=${frequency}${amount ? `&amount=${amount}` : ''}`;
+// Community links, used across the app, landing page and emails.
+// Points at this fork (the actually-deployed codebase), per AGPL-3.0 §13.
+export const REPO_URL = 'https://github.com/randomminertw-dev/OpenStock';
 export const DISCORD_URL = 'https://discord.gg/JkJ8kfxgxB';
 export const GOOD_FIRST_ISSUES_URL = `${REPO_URL}/issues?q=is%3Aopen+label%3A%22good+first+issue%22`;
 
