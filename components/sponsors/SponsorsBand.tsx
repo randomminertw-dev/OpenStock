@@ -66,7 +66,7 @@ export default function SponsorsBand() {
 
                     <div className="flex flex-wrap gap-2 lg:flex-col">
                         <Link href="/sponsor" className="btn btn-primary h-11 px-5 text-[15px]">Become a sponsor</Link>
-                        <a href={`mailto:${SPONSOR_CONTACT_EMAIL}?subject=Sponsoring%20OpenStock`} className="btn btn-ghost h-11 px-5 text-[15px]">Talk with us</a>
+                        <a href={`mailto:${SPONSOR_CONTACT_EMAIL}?subject=Sponsoring%20RandomInvestigation`} className="btn btn-ghost h-11 px-5 text-[15px]">Talk with us</a>
                     </div>
                 </div>
             </div>

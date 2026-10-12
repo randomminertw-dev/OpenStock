@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 
 /**
- * Onto's Product Hunt launch, from the team behind OpenStock: a card pinned to the
+ * Onto's Product Hunt launch, from the team behind RandomInvestigation: a card pinned to the
  * corner of every page. Closing it hides it for this page only; it stops showing
  * on its own after launch week. Browser-only, so the server never renders it.
  */
@@ -34,7 +34,7 @@ export default function OntoLaunchCard() {
             <p className="m-0 mb-2 flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-[var(--muted)]">
                 {/* eslint-disable-next-line @next/next/no-img-element -- Onto's mark, served from its own site */}
                 <img src="https://buildonto.dev/icon.png" alt="" width={16} height={16} className="h-4 w-4" />
-                From the OpenStock team
+                From the RandomInvestigation team
             </p>
             <p className="m-0 text-base font-semibold leading-snug text-[var(--text)]">We just launched Onto on Product Hunt.</p>
             <p className="m-0 mt-1 mb-3 text-[13.5px] leading-relaxed text-[var(--muted)]">

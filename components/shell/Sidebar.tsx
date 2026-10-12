@@ -1,9 +1,9 @@
 'use client';
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { BookOpen, Code2, Heart, Info, LayoutDashboard, LifeBuoy, LogOut, Search, Star } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { openSearch } from "@/components/SearchCommand";
 import { signOut } from "@/lib/actions/auth.actions";
 import { cn } from "@/lib/utils";
@@ -34,8 +34,8 @@ const Sidebar = ({ user, watchlist }: SidebarProps) => {
 
     return (
         <aside className="sidebar">
-            <Link href="/dashboard" className="px-2 pt-1 pb-2" aria-label="OpenStock dashboard">
-                <Image src="/assets/images/logo.png" alt="OpenStock" width={150} height={38} priority />
+            <Link href="/dashboard" className="px-2 pt-1 pb-2" aria-label="RandomInvestigation dashboard">
+                <BrandLogo markSize={30} />
             </Link>
 
             <button type="button" onClick={openSearch} className="side-cta">
@@ -87,7 +87,7 @@ const Sidebar = ({ user, watchlist }: SidebarProps) => {
                     onClick={() => window.dispatchEvent(new CustomEvent('open-donate-popup'))}
                     className="side-item h-8 text-left"
                 >
-                    <Heart /> Support OpenStock
+                    <Heart /> Support RandomInvestigation
                 </button>
             </div>
 
@@ -104,7 +104,7 @@ const Sidebar = ({ user, watchlist }: SidebarProps) => {
                         <span className="kicker flex items-center gap-1.5 text-brand-ink">
                             <span className="live-dot" /> {openSlots === SIDEBAR_SPONSOR_SLOTS ? 'Sponsor slots open' : `${openSlots} sponsor ${openSlots === 1 ? 'slot' : 'slots'} left`}
                         </span>
-                        <span className="text-[12.5px] text-faint transition-colors group-hover:text-muted-foreground">Put your company in front of every OpenStock user.</span>
+                        <span className="text-[12.5px] text-faint transition-colors group-hover:text-muted-foreground">Put your company in front of every RandomInvestigation user.</span>
                     </Link>
                 )}
             </div>

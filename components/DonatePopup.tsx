@@ -62,10 +62,10 @@ export default function DonatePopup() {
                     </span>
                     <div>
                         <p className="kicker flex items-center gap-2 text-brand-ink"><span className="live-dot" /> Open for sponsors</p>
-                        <DialogTitle className="mt-1.5 text-2xl font-bold tracking-[-0.03em]">Keep OpenStock free</DialogTitle>
+                        <DialogTitle className="mt-1.5 text-2xl font-bold tracking-[-0.03em]">Keep RandomInvestigation free</DialogTitle>
                     </div>
                     <DialogDescription className="text-[15px] leading-relaxed text-muted-foreground">
-                        Your love for OpenStock and Open Dev Society has helped us grow, and we&apos;re now hitting
+                        Your love for RandomInvestigation and Open Dev Society has helped us grow, and we&apos;re now hitting
                         Vercel&apos;s free tier limits. Sponsor from $5 a month, give once, or talk with us about a partnership.
                     </DialogDescription>
                 </DialogHeader>

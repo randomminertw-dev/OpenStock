@@ -5,34 +5,35 @@
 
 /*
  * Design language: dashboard-craft (floated shell, dark chrome, browser tabs,
- * hatch shells, bento tiles) in a dark warm workspace.
- * Two hues carry everything: neutral hue 95 (warm) and accent hue 176 (OpenStock teal).
- * Up/down share one lightness (0.70) and chroma % so neither shouts louder.
+ * hatch shells, bento tiles) in a deep-space blue-grey workspace.
+ * Two hues carry everything: neutral hue 258 (cool slate) and accent hue 80
+ * (RandomInvestigation amber gold — the detective's lantern).
+ * Up/down share one lightness (0.70) and chroma so neither shouts louder.
  */
 :root {
-    --page:        oklch(0.13 0.006 95);    /* near-black behind the floated app */
-    --side:        oklch(0.165 0.007 95);   /* sidebar + tab chrome */
-    --frame:       oklch(0.185 0.007 95);   /* hatch shell frame (recessed) */
-    --canvas:      oklch(0.205 0.007 95);   /* workspace; active tab = canvas */
-    --card:        oklch(0.235 0.008 95);   /* inner card (raised) */
-    --hover:       oklch(0.27 0.008 95);
-    --line:        oklch(0.29 0.008 95);
-    --line-strong: oklch(0.36 0.01 95);
-    --text:        oklch(0.95 0.006 95);
-    --muted:       oklch(0.74 0.012 95);
-    --faint:       oklch(0.62 0.012 95);
+    --page:        oklch(0.13 0.010 258);   /* near-black behind the floated app */
+    --side:        oklch(0.165 0.011 258);  /* sidebar + tab chrome */
+    --frame:       oklch(0.185 0.012 258);  /* hatch shell frame (recessed) */
+    --canvas:      oklch(0.205 0.012 258);  /* workspace; active tab = canvas */
+    --card:        oklch(0.235 0.013 258);  /* inner card (raised) */
+    --hover:       oklch(0.27 0.013 258);
+    --line:        oklch(0.29 0.013 258);
+    --line-strong: oklch(0.36 0.015 258);
+    --text:        oklch(0.95 0.008 258);
+    --muted:       oklch(0.74 0.015 258);
+    --faint:       oklch(0.62 0.015 258);
 
-    --brand:        oklch(0.80 0.13 176);   /* fills + icons */
-    --brand-strong: oklch(0.72 0.12 176);
-    --brand-ink:    oklch(0.85 0.12 176);   /* the only brand colour allowed as text */
-    --brand-soft:   oklch(0.31 0.05 176);   /* brand as a fill behind text */
-    --on-brand:     oklch(0.22 0.04 176);
+    --brand:        oklch(0.78 0.145 80);   /* fills + icons */
+    --brand-strong: oklch(0.70 0.135 80);
+    --brand-ink:    oklch(0.84 0.135 80);   /* the only brand colour allowed as text */
+    --brand-soft:   oklch(0.30 0.055 80);   /* brand as a fill behind text */
+    --on-brand:     oklch(0.23 0.05 80);
 
-    --up:        oklch(0.70 0.164 150);
-    --up-soft:   oklch(0.30 0.055 150);
-    --down:      oklch(0.70 0.162 25);
-    --down-soft: oklch(0.30 0.055 25);
-    --warn:      oklch(0.76 0.119 70);
+    --up:        oklch(0.70 0.160 155);
+    --up-soft:   oklch(0.30 0.055 155);
+    --down:      oklch(0.70 0.160 20);
+    --down-soft: oklch(0.30 0.055 20);
+    --warn:      oklch(0.74 0.130 60);
 
     --tab-ease: cubic-bezier(0.32, 0.72, 0, 1);
     --ui-ease:  cubic-bezier(0.2, 0, 0, 1);
@@ -106,32 +107,32 @@
 }
 
 /* Legacy utility scales, repointed so older pages (about, help, terms, api-docs)
-   pick up the warm palette without a rewrite. */
+   pick up the cool slate + amber palette without a rewrite. */
 @theme {
-    --color-gray-50:  oklch(0.97 0.004 95);
-    --color-gray-100: oklch(0.95 0.006 95);
-    --color-gray-200: oklch(0.90 0.007 95);
-    --color-gray-300: oklch(0.83 0.009 95);
-    --color-gray-400: oklch(0.80 0.01 95);
-    --color-gray-500: oklch(0.66 0.012 95);
-    --color-gray-600: oklch(0.36 0.01 95);
-    --color-gray-700: oklch(0.27 0.008 95);
-    --color-gray-800: oklch(0.205 0.007 95);
-    --color-gray-900: oklch(0.13 0.006 95);
-    --color-gray-950: oklch(0.10 0.005 95);
+    --color-gray-50:  oklch(0.97 0.005 258);
+    --color-gray-100: oklch(0.95 0.008 258);
+    --color-gray-200: oklch(0.90 0.009 258);
+    --color-gray-300: oklch(0.83 0.011 258);
+    --color-gray-400: oklch(0.80 0.012 258);
+    --color-gray-500: oklch(0.66 0.014 258);
+    --color-gray-600: oklch(0.36 0.012 258);
+    --color-gray-700: oklch(0.27 0.010 258);
+    --color-gray-800: oklch(0.205 0.012 258);
+    --color-gray-900: oklch(0.13 0.010 258);
+    --color-gray-950: oklch(0.10 0.008 258);
 
-    --color-teal-300: oklch(0.88 0.10 176);
-    --color-teal-400: oklch(0.85 0.12 176);
-    --color-teal-500: oklch(0.80 0.13 176);
-    --color-teal-600: oklch(0.72 0.12 176);
-    --color-teal-700: oklch(0.58 0.10 176);
-    --color-teal-800: oklch(0.42 0.07 176);
-    --color-teal-900: oklch(0.31 0.05 176);
+    --color-teal-300: oklch(0.88 0.10 80);
+    --color-teal-400: oklch(0.84 0.135 80);
+    --color-teal-500: oklch(0.78 0.145 80);
+    --color-teal-600: oklch(0.70 0.135 80);
+    --color-teal-700: oklch(0.58 0.11 80);
+    --color-teal-800: oklch(0.42 0.075 80);
+    --color-teal-900: oklch(0.30 0.055 80);
 
-    --color-green-400: oklch(0.74 0.16 150);
-    --color-green-500: oklch(0.70 0.164 150);
-    --color-red-400: oklch(0.74 0.15 25);
-    --color-red-500: oklch(0.70 0.162 25);
+    --color-green-400: oklch(0.74 0.16 155);
+    --color-green-500: oklch(0.70 0.16 155);
+    --color-red-400: oklch(0.74 0.15 20);
+    --color-red-500: oklch(0.70 0.16 20);
 }
 
 @layer base {
@@ -652,7 +653,7 @@
         height: 34px;
         overflow: hidden;
         border-radius: 999px;
-        background: oklch(0.96 0.004 95);
+        background: oklch(0.96 0.005 258);
         color: var(--on-brand);
         font-weight: 700;
         font-size: 13px;
