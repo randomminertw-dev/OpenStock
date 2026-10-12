@@ -199,21 +199,23 @@ function MultiLevelIds({
 }
 
 export default async function IndicatorDashboard({ symbol }: { symbol: string }) {
-    const [{ assessment, reason }, factorAssessment] = await Promise.all([
+    const [{ assessment, reason, candleCount }, factorAssessment] = await Promise.all([
         getIndicatorAssessmentWithReason(symbol),
         getFactorAssessment(symbol),
     ]);
     if (!assessment) {
-        const message =
-            reason === 'api-error'
-                ? '行情資料服務暫時無法連線，請稍後再回來看看。'
-                : reason === 'crypto'
-                  ? '該幣種目前無技術指標資料。'
-                  : '目前沒有足夠的日 K 線資料計算 57 項技術指標（至少需要 60 根），稍後再回來看看。';
+        const messages = {
+            'api-error': { title: '行情服務暫時無法使用', message: '歷史行情讀取失敗，請稍後重新整理再試。' },
+            'missing-config': { title: '行情來源設定缺失', message: '歷史行情服務尚未設定完成，或憑證與權限需要確認，請聯絡管理者。' },
+            'unsupported-symbol': { title: '尚未支援此標的', message: '目前的歷史行情來源無法辨識或支援此標的。' },
+            'no-data': { title: '查無歷史資料', message: '行情來源未提供此標的的日 K 線資料。' },
+            'insufficient-data': { title: '資料不足', message: `目前取得 ${candleCount} 根有效日 K 線，至少需要 60 根才能開始計算技術指標。` },
+        };
+        const { title, message } = messages[reason ?? 'api-error'];
         return (
             <div className="empty-state py-10">
                 <span className="empty-icon"><Scale className="size-5" /></span>
-                <h3>資料不足</h3>
+                <h3>{title}</h3>
                 <p className="max-w-80 text-[13px]">
                     {message}
                 </p>
@@ -221,7 +223,9 @@ export default async function IndicatorDashboard({ symbol }: { symbol: string })
         );
     }
 
-    const { results, ids, asof } = assessment;
+    const { results, ids, asof, source } = assessment;
+    const sourceNames = { alpaca: 'Alpaca', binance: 'Binance', finmind: 'FinMind', finnhub: 'Finnhub' };
+    const dataDate = new Date(asof).toLocaleDateString('sv-SE', { timeZone: source?.timeZone ?? 'UTC' });
 
     return (
         <div className="flex flex-col">
@@ -230,7 +234,7 @@ export default async function IndicatorDashboard({ symbol }: { symbol: string })
             <IndicatorTable results={results} />
             {factorAssessment && (
                 <>
-                    <FactorCards symbol={symbol} />
+                    <FactorCards factors={factorAssessment.factors} />
                     <MultiLevelIds
                         ids={ids}
                         idsPeriod={factorAssessment.idsPeriod}
@@ -248,7 +252,12 @@ export default async function IndicatorDashboard({ symbol }: { symbol: string })
             <NewsSentimentCard symbol={symbol} />
             <p className="border-t border-line px-3 py-2.5 text-[11.5px] leading-relaxed text-faint">
                 技術指標投票僅供參考，不構成投資建議。
-                <span className="num">資料日期 {asof}</span>
+                <span className="num">資料日期 {dataDate}</span>
+                {source && (
+                    <span> · {sourceNames[source.provider]} · {source.symbol}
+                        {source.priceBasis === 'unadjusted' ? ' · 盤後日 K（未還原股價）' : ' · 日 K'}
+                    </span>
+                )}
             </p>
         </div>
     );

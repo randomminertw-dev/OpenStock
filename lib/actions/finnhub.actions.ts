@@ -6,6 +6,8 @@ import { cache } from 'react';
 import { QUOTE_TTL_SECONDS } from '@/lib/market-data';
 import { hasFinnhubQuotes } from '@/lib/markets';
 import { getSession } from '@/lib/better-auth/auth';
+import { CandleRequestError, createCandleCache, failure, normalizeCandles } from '../candles/shared';
+import type { CandleResult, CandleSource } from '../candles/types';
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 // Key pool: each free key has its own 60 req/min, so N keys = N x the quota. Rotated per request.
@@ -230,31 +232,34 @@ type FinnhubCandleResponse = {
     v?: number[]; // volume
 };
 
-export async function getCandles(symbol: string, resolution = 'D', days = 120) {
-    try {
+const candleResponseCache = createCandleCache();
+
+/** Preserve source failures for the candle router; legacy callers still receive null. */
+export async function getCandlesWithReason(symbol: string, resolution = 'D', days = 120): Promise<CandleResult> {
+    const source: CandleSource = { provider: 'finnhub', symbol, timeZone: 'UTC' };
+    if (FINNHUB_KEYS.length === 0) return failure('missing-config', source);
+    return candleResponseCache.get(`finnhub:${symbol}:${resolution}:${days}`, source, () => withSlot(async () => {
         const to = Math.floor(Date.now() / 1000);
         const from = to - days * 86400;
         const url =
             `${FINNHUB_BASE_URL}/stock/candle?symbol=${encodeURIComponent(symbol)}` +
             `&resolution=${resolution}&from=${from}&to=${to}`;
-        // Daily candles barely move intraday: cache for an hour
-        const data = await fetchJSON<FinnhubCandleResponse>(url, 3600);
-        if (!data || data.s !== 'ok' || !Array.isArray(data.c) || data.c.length === 0) return null;
-        // o/h/l/v are optional at the type level: default to [] when absent so
-        // callers that only need .c/.t keep working (backward compatible).
-        return {
-            c: data.c,
-            t: Array.isArray(data.t) ? data.t : [],
-            s: data.s as string,
-            o: Array.isArray(data.o) ? data.o : [],
-            h: Array.isArray(data.h) ? data.h : [],
-            l: Array.isArray(data.l) ? data.l : [],
-            v: Array.isArray(data.v) ? data.v : [],
-        };
-    } catch (e) {
-        logFailure('candles', symbol, e);
-        return null;
-    }
+        // Keep key rotation and the shared limiter, but do not collapse HTTP errors to null.
+        const response = await fetchWithKeyPool(url, 0);
+        if (response.status === 401 || response.status === 403) throw new CandleRequestError('missing-config');
+        if (response.status === 404) throw new CandleRequestError('unsupported-symbol');
+        if (!response.ok) throw new CandleRequestError('api-error');
+        const data = await response.json() as FinnhubCandleResponse | null;
+        if (data?.s === 'no_data') throw new CandleRequestError('no-data');
+        if (data?.s !== 'ok' || !Array.isArray(data.c)) throw new CandleRequestError('api-error');
+        return normalizeCandles(data.c.map((c, i) => ({
+            c, t: data.t?.[i], o: data.o?.[i], h: data.h?.[i], l: data.l?.[i], v: data.v?.[i],
+        })));
+    }));
+}
+
+export async function getCandles(symbol: string, resolution = 'D', days = 120) {
+    return (await getCandlesWithReason(symbol, resolution, days)).candles;
 }
 
 export async function getNews(symbols?: string[]): Promise<MarketNewsArticle[]> {

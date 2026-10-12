@@ -1,5 +1,4 @@
 import { TrendingUp, Minus, Zap, BarChart3, ShieldAlert } from 'lucide-react';
-import { getFactorAssessment } from '@/lib/actions/indicators.actions';
 import { cn } from '@/lib/utils';
 import type { FactorId, FactorScore, FourFactors } from '@/lib/indicators/factors';
 
@@ -66,20 +65,7 @@ function FactorCard({ factor }: { factor: FactorScore }) {
     );
 }
 
-export default async function FactorCards({ symbol }: { symbol: string }) {
-    const assessment = await getFactorAssessment(symbol);
-
-    if (!assessment) {
-        return (
-            <div className="px-3 pb-1 pt-3">
-                <p className="kicker">四因素評分</p>
-                <p className="mt-2 py-4 text-center text-[13px] text-faint">資料不足</p>
-            </div>
-        );
-    }
-
-    const factors: FourFactors = assessment.factors;
-
+export default function FactorCards({ factors }: { factors: FourFactors }) {
     return (
         <div className="px-3 pb-1 pt-3">
             <div className="flex items-center justify-between gap-2">

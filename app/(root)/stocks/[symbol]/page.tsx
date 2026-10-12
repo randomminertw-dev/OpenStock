@@ -28,8 +28,6 @@ async function Sentiment({ symbol }: { symbol: string }) {
 }
 
 async function Factors({ symbol }: { symbol: string }) {
-    // CoinGecko coins have no Finnhub candles; skip the panel entirely.
-    if (isCoinGeckoSymbol(symbol)) return null;
     return (
         <Panel title="技術指標投票" sub="57 項指標分歧監控 · IDS">
             <IndicatorDashboard symbol={symbol} />
@@ -44,7 +42,7 @@ export default async function StockDetails({ params }: StockDetailsPageProps) {
 
     // CoinGecko coins (`CG:` prefix) have no TradingView symbol mapping:
     // show the header with live price and a friendly placeholder instead of
-    // the TradingView chart/financials/technicals/profile panels.
+    // the TradingView panels. Our own indicator panel uses the candle router.
     if (isCoinGeckoSymbol(symbol)) {
         return (
             <>
@@ -56,10 +54,15 @@ export default async function StockDetails({ params }: StockDetailsPageProps) {
                         <span className="empty-icon"><CandlestickChart className="size-5" /></span>
                         <h3>加密貨幣圖表即將推出</h3>
                         <p className="max-w-80 text-[13px]">
-                            目前支援搜尋與即時報價，K 線圖、財務數據與技術分析面板即將支援。
+                            目前支援搜尋、即時報價與下方技術指標；此處尚未提供加密貨幣 K 線圖。
                         </p>
                     </div>
                 </Panel>
+                <div className="mt-3">
+                    <Suspense fallback={null}>
+                        <Factors symbol={symbol} />
+                    </Suspense>
+                </div>
             </>
         );
     }

@@ -12,8 +12,8 @@ import {
 // getCandles：打 https://finnhub.io/api/v1/stock/candle、失敗回 null 不拋錯。
 // getDailyCandles 的 Finnhub 備援走的是 stubbed global fetch，已由
 // mockRoutedFetch 接管。
-vi.mock('./finnhub.actions', () => ({
-    getCandles: vi.fn(async (symbol: string, resolution = 'D', days = 120) => {
+vi.mock('./finnhub.actions', () => {
+    const getCandles = vi.fn(async (symbol: string, resolution = 'D', days = 120) => {
         const to = Math.floor(Date.now() / 1000);
         const from = to - days * 86400;
         const url =
@@ -44,8 +44,15 @@ vi.mock('./finnhub.actions', () => ({
         } catch {
             return null;
         }
-    }),
-}));
+    });
+    return {
+        getCandles,
+        getCandlesWithReason: async (symbol: string, resolution: string, days: number) => {
+            const candles = await getCandles(symbol, resolution, days);
+            return { candles, reason: candles ? null : 'api-error', source: { provider: 'finnhub', symbol, timeZone: 'UTC' } };
+        },
+    };
+});
 
 /**
  * Task 1 測試：Alpaca 日 K 客戶端。

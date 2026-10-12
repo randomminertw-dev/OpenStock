@@ -213,6 +213,7 @@ ALPACA_API_SECRET=your_alpaca_secret
 
 # CoinGecko (cryptocurrency prices; free, no key required)
 # Optional: COINGECKO_DEMO_API_KEY=your_demo_key (raises rate limits)
+# Optional: FINMIND_API_TOKEN=your_finmind_token (Taiwan daily history; sent server-side only)
 
 # Sentiment insights (optional)
 ADANOS_API_KEY=your_adanos_api_key
@@ -293,9 +294,27 @@ public/assets/images/   # logos and screenshots
     - Free tier covers quotes and news; historical candles (`/stock/candle`) require a paid plan.
 
 - Alpaca
-    - Historical daily candles powering the 57-indicator voting, four factors, and multi-period exploration.
+    - US stock and `CG:` cryptocurrency daily candles powering technical indicators.
     - Set `ALPACA_API_KEY` and `ALPACA_API_SECRET` (free tier at https://alpaca.markets).
-    - Falls back to Finnhub candles when Alpaca is unavailable.
+    - US stocks fall back to Finnhub candles when Alpaca is unavailable.
+
+- Binance public market data
+    - Crypto-tab pairs such as `BINANCE:BTCUSDT` use `data-api.binance.vision/api/v3/klines` without an API key.
+    - Preserves the exact trading pair and excludes unfinished daily candles; does not substitute USD for USDT.
+
+- FinMind
+    - Taiwan daily OHLCV from `TaiwanStockPrice`, including listed and OTC stocks.
+    - Accepts `.TW` / `.TWO` and `TWSE:` / `TPEX:` symbols. Prices are unadjusted, end-of-day, in the Taipei trading calendar.
+    - Works without a key; optionally set server-only `FINMIND_API_TOKEN` for your account quota. Never use a `NEXT_PUBLIC_` prefix.
+
+- Indicator availability
+    - Requests 400 calendar days; needs at least 60 valid candles to render. Longer indicators can still be N/A.
+    - Taiwan and crypto do not use the US SPY benchmark: RS, Beta and RRG remain N/A until a suitable comparison series is configured.
+    - Successful history is cached for one hour; failures cool down for one minute, with concurrent requests deduplicated per server instance.
+    - The panel separates API errors, missing credentials, unsupported symbols, empty history and genuinely short history.
+    - Missing volume is retained as an availability flag. If any retained bar lacks volume (or all volume is zero), volume indicators, the V factor and CMF variants are N/A; price indicators still render.
+    - Offline regression checks: `npx vitest run lib/actions/alpaca.actions.test.ts lib/actions/candles-routing.test.ts lib/actions/finnhub-candles.test.ts __tests__/market-indicators.test.tsx`.
+    - Optional live public-data check: `LIVE_MARKET_DATA=1 npx vitest run __tests__/market-candles.live.test.ts` (uses provider quota; no database required).
 
 - CoinGecko
     - Cryptocurrency search and real-time prices (free, no key required).
