@@ -24,8 +24,9 @@ export interface IndicatorAssessment {
   symbol: string;
 }
 
-/** Convert a raw Finnhub candle response into aligned Candle[]; skips any
- * index where one of t/o/h/l/c/v is missing or not a finite number. */
+/** Convert a raw Finnhub candle response into aligned Candle[].
+ * Requires t/o/h/l/c to be finite numbers; volume (v) is optional and
+ * defaults to 0 when missing (volume indicators show N/A for those). */
 function toCandles(raw: {
   c: number[];
   t: number[];
@@ -36,12 +37,16 @@ function toCandles(raw: {
 }): Candle[] {
   const out: Candle[] = [];
   for (let i = 0; i < raw.c.length; i++) {
-    const vals = [raw.t[i], raw.o[i], raw.h[i], raw.l[i], raw.c[i], raw.v[i]];
+    const vals = [raw.t[i], raw.o[i], raw.h[i], raw.l[i], raw.c[i]];
     if (!vals.every((x) => typeof x === 'number' && Number.isFinite(x))) continue;
-    out.push({ t: raw.t[i], o: raw.o[i], h: raw.h[i], l: raw.l[i], c: raw.c[i], v: raw.v[i] });
+    const v = typeof raw.v[i] === 'number' && Number.isFinite(raw.v[i]) ? raw.v[i] : 0;
+    out.push({ t: raw.t[i], o: raw.o[i], h: raw.h[i], l: raw.l[i], c: raw.c[i], v });
   }
   return out;
 }
+
+/** Why an assessment could not be produced (for UI messaging). */
+export type AssessmentFailureReason = 'crypto' | 'api-error' | 'insufficient-data';
 
 /**
  * 57-indicator vote + IDS assessment for a US stock symbol.
@@ -51,9 +56,20 @@ function toCandles(raw: {
 export async function getIndicatorAssessment(
   symbol: string,
 ): Promise<IndicatorAssessment | null> {
+  const result = await getIndicatorAssessmentWithReason(symbol);
+  return result.assessment;
+}
+
+/**
+ * Same as getIndicatorAssessment but also reports why it failed,
+ * so the UI can distinguish an API outage from genuinely short history.
+ */
+export async function getIndicatorAssessmentWithReason(
+  symbol: string,
+): Promise<{ assessment: IndicatorAssessment | null; reason: AssessmentFailureReason | null }> {
   try {
     // Crypto prices come from CoinGecko, not Finnhub: no candle data available.
-    if (!symbol || symbol.startsWith('CG:')) return null;
+    if (!symbol || symbol.startsWith('CG:')) return { assessment: null, reason: 'crypto' };
 
     // days=400 guarantees 250+ trading days for SMA200 after holidays/gaps.
     const [symR, spyR] = await Promise.allSettled([
@@ -62,10 +78,21 @@ export async function getIndicatorAssessment(
     ]);
 
     const raw = symR.status === 'fulfilled' ? symR.value : null;
-    if (!raw || !Array.isArray(raw.c) || raw.c.length < 60) return null;
+    if (!raw || !Array.isArray(raw.c) || raw.c.length === 0) {
+      console.error(`[indicators] candle API failed for ${symbol}: no usable response`);
+      return { assessment: null, reason: 'api-error' };
+    }
+    if (raw.c.length < 60) {
+      return { assessment: null, reason: 'insufficient-data' };
+    }
 
     const candles = toCandles(raw);
-    if (candles.length < 60) return null;
+    if (candles.length < 60) {
+      console.error(
+        `[indicators] candle filtering dropped too many for ${symbol}: ${raw.c.length} -> ${candles.length}`,
+      );
+      return { assessment: null, reason: 'insufficient-data' };
+    }
 
     // SPY failure is non-fatal: breadth falls back to market-wide mode.
     const spyRaw = spyR.status === 'fulfilled' ? spyR.value : null;
@@ -73,14 +100,18 @@ export async function getIndicatorAssessment(
 
     const { results, ids } = computeAll(candles, spyCandles);
     return {
-      results,
-      ids,
-      asof: new Date(candles[candles.length - 1].t * 1000).toISOString(),
-      symbol,
+      assessment: {
+        results,
+        ids,
+        asof: new Date(candles[candles.length - 1].t * 1000).toISOString(),
+        symbol,
+      },
+      reason: null,
     };
-  } catch {
+  } catch (e) {
     // Server action contract: never throw.
-    return null;
+    console.error(`[indicators] unexpected error for ${symbol}:`, e);
+    return { assessment: null, reason: 'api-error' };
   }
 }
 

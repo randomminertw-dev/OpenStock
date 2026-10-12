@@ -1,5 +1,5 @@
 import { TrendingUp, TrendingDown, Minus, Scale, Newspaper, ChevronDown } from 'lucide-react';
-import { getFactorAssessment, getIndicatorAssessment } from '@/lib/actions/indicators.actions';
+import { getFactorAssessment, getIndicatorAssessmentWithReason } from '@/lib/actions/indicators.actions';
 import { getNews } from '@/lib/actions/finnhub.actions';
 import { scoreNewsSentiment } from '@/lib/factors/scoring';
 import { cn } from '@/lib/utils';
@@ -199,17 +199,23 @@ function MultiLevelIds({
 }
 
 export default async function IndicatorDashboard({ symbol }: { symbol: string }) {
-    const [assessment, factorAssessment] = await Promise.all([
-        getIndicatorAssessment(symbol),
+    const [{ assessment, reason }, factorAssessment] = await Promise.all([
+        getIndicatorAssessmentWithReason(symbol),
         getFactorAssessment(symbol),
     ]);
     if (!assessment) {
+        const message =
+            reason === 'api-error'
+                ? '行情資料服務暫時無法連線，請稍後再回來看看。'
+                : reason === 'crypto'
+                  ? '加密貨幣目前不支援技術指標分析。'
+                  : '目前沒有足夠的日 K 線資料計算 57 項技術指標（至少需要 60 根），稍後再回來看看。';
         return (
             <div className="empty-state py-10">
                 <span className="empty-icon"><Scale className="size-5" /></span>
                 <h3>資料不足</h3>
                 <p className="max-w-80 text-[13px]">
-                    目前沒有足夠的日 K 線資料計算 57 項技術指標（至少需要 60 根），稍後再回來看看。
+                    {message}
                 </p>
             </div>
         );
