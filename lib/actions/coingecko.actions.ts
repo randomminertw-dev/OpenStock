@@ -5,8 +5,17 @@ import { coinIdFromSymbol } from '@/lib/coingecko';
 const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
 const FETCH_TIMEOUT_MS = 8000;
 const SEARCH_TTL_MS = 3600_000; // 1 hour
-const PRICE_TTL_MS = 120_000; // 2 minutes
+const PRICE_TTL_MS = 300_000; // 5 minutes (raised to ease CoinGecko rate limits)
 const MAX_CACHE_ENTRIES = 500;
+const RETRY_DELAY_MS = 1500;
+
+// Optional free "demo" API key from coingecko.com (30 calls/min vs ~10-15
+// without). Set COINGECKO_DEMO_API_KEY in Vercel env vars to use it.
+const DEMO_API_KEY = process.env.COINGECKO_DEMO_API_KEY?.trim();
+
+function coingeckoHeaders(): HeadersInit {
+    return DEMO_API_KEY ? { 'x-cg-demo-api-key': DEMO_API_KEY } : {};
+}
 
 // Tiny per-instance TTL cache. CoinGecko's free tier is rate-limited
 // (~10-30 calls/min), so search results and prices are cached aggressively.
@@ -16,7 +25,19 @@ async function cachedGet<T>(key: string, url: string, ttlMs: number): Promise<T 
     const hit = priceCache.get(key);
     if (hit && hit.freshUntil > Date.now()) return hit.value as T;
     try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        let res = await fetch(url, {
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+            headers: coingeckoHeaders(),
+        });
+        // CoinGecko's free tier rate-limits shared cloud IPs aggressively;
+        // one delayed retry often succeeds where the first attempt got a 429.
+        if (res.status === 429) {
+            await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+            res = await fetch(url, {
+                signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+                headers: coingeckoHeaders(),
+            });
+        }
         if (!res.ok) throw new Error(`CoinGecko responded ${res.status}`);
         const data = (await res.json()) as T;
         if (priceCache.size >= MAX_CACHE_ENTRIES) priceCache.delete(priceCache.keys().next().value!);
