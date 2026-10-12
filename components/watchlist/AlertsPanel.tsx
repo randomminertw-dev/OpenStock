@@ -49,8 +49,8 @@ export default function AlertsPanel({ alerts }: { alerts: AlertRow[] }) {
             <div className="empty-state py-10">
                 <span className="empty-icon"><BellRing className="size-5" /></span>
                 <h3>Alerts come with Cloud</h3>
-                <p className="max-w-64 text-[13px]">Email price alerts are part of OpenStock Cloud, $5 a month and coming soon.</p>
-                <Link href="/#data" className="btn btn-ghost mt-2">See OpenStock Cloud</Link>
+                <p className="max-w-64 text-[13px]">Email price alerts are part of RandomInvestigation Cloud, $5 a month and coming soon.</p>
+                <Link href="/#data" className="btn btn-ghost mt-2">See RandomInvestigation Cloud</Link>
             </div>
         );
     }
@@ -69,7 +69,7 @@ export default function AlertsPanel({ alerts }: { alerts: AlertRow[] }) {
         <>
             {!alertsEnabled && (
                 <p className="px-3 pt-3 pb-1 text-[12.5px] text-faint">
-                    Alerts moved to <Link href="/#data" className="text-brand-ink hover:underline">OpenStock Cloud</Link>, so these are paused.
+                    Alerts moved to <Link href="/#data" className="text-brand-ink hover:underline">RandomInvestigation Cloud</Link>, so these are paused.
                 </p>
             )}
             <ul className="row-list">
