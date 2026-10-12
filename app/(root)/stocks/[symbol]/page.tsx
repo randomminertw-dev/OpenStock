@@ -13,6 +13,7 @@ import {
 import { getStockSentimentInsights } from '@/lib/actions/adanos.actions';
 import { getFactorAssessment } from '@/lib/actions/factors.actions';
 import StockFactorsPanel from "@/components/stocks/StockFactorsPanel";
+import { isCoinGeckoSymbol } from "@/lib/coingecko";
 import { formatSymbolForTradingView, isChartEmbeddable, tradingViewSymbolUrl } from '@/lib/utils';
 
 const scriptUrl = `https://s3.tradingview.com/external-embedding/embed-widget-`;
@@ -41,6 +42,29 @@ async function Factors({ symbol }: { symbol: string }) {
 export default async function StockDetails({ params }: StockDetailsPageProps) {
     const { symbol: rawSymbol } = await params;
     const symbol = decodeURIComponent(rawSymbol).toUpperCase();
+
+    // CoinGecko coins (`CG:` prefix) have no TradingView symbol mapping:
+    // show the header with live price and a friendly placeholder instead of
+    // the TradingView chart/financials/technicals/profile panels.
+    if (isCoinGeckoSymbol(symbol)) {
+        return (
+            <>
+                <Suspense fallback={<StockHeaderSkeleton />}>
+                    <StockHeader symbol={symbol} />
+                </Suspense>
+                <Panel title="圖表" sub="加密貨幣">
+                    <div className="empty-state py-14">
+                        <span className="empty-icon"><CandlestickChart className="size-5" /></span>
+                        <h3>加密貨幣圖表即將推出</h3>
+                        <p className="max-w-80 text-[13px]">
+                            目前支援搜尋與即時報價，K 線圖、財務數據與技術分析面板即將支援。
+                        </p>
+                    </div>
+                </Panel>
+            </>
+        );
+    }
+
     const tvSymbol = formatSymbolForTradingView(symbol);
 
     return (

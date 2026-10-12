@@ -11,6 +11,9 @@ const MIN_CANDLES = 60;
 async function fetchFactorAssessment(symbol: string): Promise<FactorAssessment | null> {
     const clean = (symbol || '').trim().toUpperCase();
     if (!clean) return null;
+    // CoinGecko coins: Finnhub has no candles or company news for them;
+    // skip rather than scoring them on general market news.
+    if (clean.startsWith('CG:')) return null;
 
     const [candlesResult, newsResult] = await Promise.allSettled([
         getCandles(clean),

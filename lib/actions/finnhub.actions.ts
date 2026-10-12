@@ -6,6 +6,8 @@ import { cache } from 'react';
 import { QUOTE_TTL_SECONDS } from '@/lib/market-data';
 import { hasFinnhubQuotes } from '@/lib/markets';
 import { getSession } from '@/lib/better-auth/auth';
+import { isCoinGeckoSymbol, coinIdFromSymbol } from '@/lib/coingecko';
+import { getCryptoQuote, searchCoins } from './coingecko.actions';
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 // Key pool: each free key has its own 60 req/min, so N keys = N x the quota. Rotated per request.
@@ -163,6 +165,8 @@ function getExchangeLabel(symbol: string, exchange?: string) {
 }
 
 export async function getQuote(symbol: string, revalidateSeconds = 0) {
+    // CoinGecko-backed crypto (e.g. `CG:pha`) bypasses Finnhub entirely.
+    if (isCoinGeckoSymbol(symbol)) return getCryptoQuote(symbol);
     try {
         const url = `${FINNHUB_BASE_URL}/quote?symbol=${encodeURIComponent(symbol)}`;
         // Real-time by default; shared views pass a short cache to stay inside Finnhub's 60 req/min
@@ -175,8 +179,9 @@ export async function getQuote(symbol: string, revalidateSeconds = 0) {
 
 // Shared, short-lived quotes for anything shown live on screen (pages and /api/quotes)
 export async function getLiveQuotes(symbols: string[]) {
-    // Symbols the free plan can't price are skipped instead of spending a request on a 403
-    const quotes = await Promise.all(symbols.map((s) => (hasFinnhubQuotes(s) ? getQuote(s, LIVE_QUOTE_TTL) : null)));
+    // Symbols the free plan can't price are skipped instead of spending a request on a 403.
+    // `CG:` coins are priced via CoinGecko instead.
+    const quotes = await Promise.all(symbols.map((s) => (hasFinnhubQuotes(s) || isCoinGeckoSymbol(s) ? getQuote(s, LIVE_QUOTE_TTL) : null)));
     return Object.fromEntries(symbols.map((s, i) => [s, quotes[i]?.c ? quotes[i] : null]));
 }
 
@@ -198,6 +203,21 @@ export async function getWatchlistData(symbols: string[]) {
 
     // Fetch quotes and profiles in parallel
     const promises = symbols.map(async (sym) => {
+        // CoinGecko coins: price via CoinGecko, no Finnhub profile available.
+        if (isCoinGeckoSymbol(sym)) {
+            const quote = await getCryptoQuote(sym);
+            return {
+                symbol: sym,
+                price: quote?.c || 0,
+                change: quote?.d || 0,
+                changePercent: quote?.dp || 0,
+                currency: 'USD',
+                name: coinIdFromSymbol(sym).toUpperCase(),
+                logo: undefined as string | undefined,
+                marketCap: undefined as number | undefined,
+                peRatio: 0,
+            };
+        }
         const covered = hasFinnhubQuotes(sym);
         const [quote, profile] = covered
             ? await Promise.all([getQuote(sym, LIVE_QUOTE_TTL), getCompanyProfile(sym)])
@@ -329,6 +349,7 @@ export const searchStocks = cache(async (query?: string): Promise<StockWithWatch
         const trimmed = typeof query === 'string' ? query.trim() : '';
 
         let results: SearchStockCandidate[] = [];
+        let cryptoResults: StockWithWatchlistStatus[] = [];
 
         if (!trimmed) {
             // Shown in the palette on every page, so no API calls: Finnhub's free tier is 60 req/min
@@ -343,8 +364,23 @@ export const searchStocks = cache(async (query?: string): Promise<StockWithWatch
             // A public server action: only signed-in users may spend Finnhub quota on searches
             if (!(await getSession())?.user) return [];
             const url = `${FINNHUB_BASE_URL}/search?q=${encodeURIComponent(trimmed)}`;
-            const data = await fetchJSON<FinnhubSearchResponse>(url, 1800);
+            // Query Finnhub and CoinGecko in parallel; CoinGecko covers the
+            // long tail of crypto that Finnhub's free plan doesn't list.
+            const [data, coins] = await Promise.all([
+                fetchJSON<FinnhubSearchResponse>(url, 1800),
+                searchCoins(trimmed),
+            ]);
             results = Array.isArray(data?.result) ? data.result : [];
+            const seen = new Set(results.map((r) => (r.symbol || '').toUpperCase()));
+            cryptoResults = coins
+                .filter((c) => !seen.has(`CG:${c.id}`.toUpperCase()))
+                .map((c) => ({
+                    symbol: `CG:${c.id}`,
+                    name: c.name,
+                    exchange: 'CRYPTO',
+                    type: 'Cryptocurrency',
+                    isInWatchlist: false,
+                }));
         }
 
         const mapped: StockWithWatchlistStatus[] = results
@@ -365,7 +401,7 @@ export const searchStocks = cache(async (query?: string): Promise<StockWithWatch
             })
             .slice(0, 15);
 
-        return mapped;
+        return [...mapped, ...cryptoResults];
     } catch (err) {
         console.error('Error in stock search:', err);
         return [];

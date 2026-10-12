@@ -2,10 +2,14 @@ import { Bell, CalendarClock, Gauge, Landmark, MoveVertical } from "lucide-react
 import WatchlistButton from "@/components/WatchlistButton";
 import CreateAlertModal from "@/components/watchlist/CreateAlertModal";
 import StockLivePrice from "@/components/stocks/StockLivePrice";
+import ChangePill from "@/components/ChangePill";
+import PriceFlash from "@/components/PriceFlash";
 import { isStockInWatchlist } from "@/lib/actions/watchlist.actions";
 import { getCompanyProfile, getLiveQuotes } from "@/lib/actions/finnhub.actions";
+import { getCryptoQuote } from "@/lib/actions/coingecko.actions";
 import { formatNumber, formatPrice, formatSymbolForTradingView } from "@/lib/utils";
 import { hasFinnhubQuotes } from "@/lib/markets";
+import { isCoinGeckoSymbol, coinIdFromSymbol } from "@/lib/coingecko";
 import { symbolInfoConfig } from "@/lib/constants";
 import TradingViewWidget from "@/components/TradingViewWidget";
 
@@ -34,7 +38,51 @@ async function TradingViewHeader({ symbol }: { symbol: string }) {
     );
 }
 
+// Coins from CoinGecko (`CG:` prefix): priced via CoinGecko, no TradingView
+// symbol mapping and no price alerts yet.
+async function CoinGeckoHeader({ symbol }: { symbol: string }) {
+    const coinId = coinIdFromSymbol(symbol);
+    const displayName = coinId.toUpperCase();
+    const [isInWatchlist, quote] = await Promise.all([
+        isStockInWatchlist(symbol),
+        getCryptoQuote(symbol),
+    ]);
+    return (
+        <section className="hatch">
+            <div className="card flex flex-wrap items-center gap-x-6 gap-y-4 p-4">
+                <div className="flex min-w-0 flex-1 basis-64 items-center gap-3">
+                    <span className="logo-well is-empty size-11">{displayName[0] || '?'}</span>
+                    <div className="min-w-0">
+                        <h1 className="truncate text-xl font-bold tracking-[-0.03em]">{displayName}</h1>
+                        <p className="mono truncate text-[12.5px] text-faint">
+                            {symbol} · 加密貨幣 · 報價來自 CoinGecko
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex items-end gap-3">
+                    <PriceFlash value={quote?.c} className="bento-value px-1 text-[32px]">
+                        {quote?.c ? formatPrice(quote.c, 'USD') : '—'}
+                    </PriceFlash>
+                    <div className="flex flex-col items-start gap-1 pb-0.5">
+                        <ChangePill value={quote?.dp ?? null} />
+                        <span className="num text-[12px] text-faint">24 小時漲跌</span>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <WatchlistButton symbol={symbol} company={displayName} isInWatchlist={isInWatchlist} />
+                    <span className="pill h-9 px-3" title="加密貨幣價格提醒即將推出">
+                        <Bell /> 提醒：即將推出
+                    </span>
+                </div>
+            </div>
+        </section>
+    );
+}
+
 export default async function StockHeader({ symbol }: { symbol: string }) {
+    if (isCoinGeckoSymbol(symbol)) return <CoinGeckoHeader symbol={symbol} />;
     if (!hasFinnhubQuotes(symbol)) return <TradingViewHeader symbol={symbol} />;
 
     const [isInWatchlist, quotes, profile] = await Promise.all([
