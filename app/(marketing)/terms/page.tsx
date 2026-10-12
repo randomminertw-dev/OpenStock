@@ -79,7 +79,7 @@ export default function TermsPage() {
                     ))}
                 </div>
                 <p className="mt-8 text-muted-foreground">
-                    Questions about these terms? Email <a href="mailto:opendevsociety@gmail.com" className="font-semibold text-brand-ink hover:underline">opendevsociety@gmail.com</a>.
+                    Questions about these terms? Please reach out via <a href="https://github.com/randomminertw-dev/OpenStock/issues" target="_blank" rel="noreferrer" className="font-semibold text-brand-ink hover:underline">GitHub Issues</a>.
                 </p>
             </section>
         </>

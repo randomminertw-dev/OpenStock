@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 const FAQS = [
     {
         question: 'Is RandomInvestigation really free?',
-        answer: 'Yes. We run on sponsors and community contributions. Charts, watchlists and research stay free. RandomInvestigation Cloud, coming soon, adds live quotes and email price alerts for $5 a month. Self-hosting includes both.',
+        answer: 'Yes. Charts, watchlists and research stay free for everyone. Self-hosting unlocks live quotes and email price alerts.',
     },
     {
         question: 'How do I add a stock to my watchlist?',

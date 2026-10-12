@@ -32,12 +32,12 @@ const Layout = async ({ children }: { children : React.ReactNode }) => {
             <section className="auth-right-section">
                 <div className="z-10 relative lg:mt-4 lg:mb-16">
                     <blockquote className="auth-blockquote">
-                        “For me, RandomInvestigation isn’t just another stock app. It’s about giving people clarity and control in the market, without barriers or subscriptions.”
+                        “市場的清晰度，不該被 paywall 擋住。RandomInvestigation 把即時行情、技術分析與市場情緒，免費交到每個人手上。”
                     </blockquote>
                     <div className="flex items-center justify-between">
                         <div>
-                            <cite className="auth-testimonial-author">- Ravi Pratap Singh (@ravixalgorithm)</cite>
-                            <p className="max-md:text-xs text-gray-500">Founder @opendevsociety</p>
+                            <cite className="auth-testimonial-author">- RandomInvestigation 團隊</cite>
+                            <p className="max-md:text-xs text-gray-500">開源市場終端</p>
                         </div>
                         <div className="flex items-center gap-0.5">
                             {[1,2,3,4,5].map((star) => (

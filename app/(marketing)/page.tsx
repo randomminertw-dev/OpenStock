@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, Bell, CandlestickChart, Command, GitPullRequest, Github, Grid3x3, HeartHandshake, MailOpen, MessagesSquare, Star } from "lucide-react";
+import { Bell, CandlestickChart, Command, GitPullRequest, Github, Grid3x3, MailOpen, MessagesSquare, Star } from "lucide-react";
 import { MarketDial, MarketStatus } from "@/components/landing/MarketClock";
 import ProductPreview from "@/components/landing/ProductPreview";
 import SectionHead from "@/components/marketing/SectionHead";
@@ -7,12 +7,11 @@ import IconCard from "@/components/marketing/IconCard";
 import { getSession } from "@/lib/better-auth/auth";
 import { formatCount, getRepoStats } from "@/lib/github";
 import { cn } from "@/lib/utils";
-import { sidebarSponsors } from "@/lib/sponsors";
-import { DISCORD_URL, GOOD_FIRST_ISSUES_URL, REPO_URL } from "@/lib/constants";
+import { GOOD_FIRST_ISSUES_URL, REPO_URL } from "@/lib/constants";
 
 const FEATURES = [
     { icon: CandlestickChart, title: 'Charts that move', body: 'TradingView candles, technicals and financials for any listed company, full screen when you need room.' },
-    { icon: Bell, title: 'Alerts by email', body: 'With RandomInvestigation Cloud, set a target above or below the price. We check every five minutes and write when it crosses.' },
+    { icon: Bell, title: 'Alerts by email', body: 'Set a target above or below the price. We check every five minutes and write when it crosses.' },
     { icon: MessagesSquare, title: 'Sentiment in one read', body: 'Buzz and bullishness from Reddit, X.com, news and Polymarket, side by side for each stock.' },
     { icon: Grid3x3, title: 'The whole market', body: 'Sector heatmap, movers and top stories on one screen before the bell.' },
     { icon: Command, title: 'Find anything with ⌘K', body: 'Search every exchange Finnhub covers and open a stock as a tab, like a browser.' },
@@ -26,11 +25,6 @@ const TIERS = [
         cta: { label: 'Get started', href: '/sign-up' },
     },
     {
-        name: 'RandomInvestigation Cloud', price: '$5', per: '/month', tag: 'Coming soon', cadence: 'Every 15 seconds', perHour: 240,
-        body: 'The same app with live quotes and email price alerts, hosted on a pool of market data keys. Nothing to set up.',
-        cta: { label: 'Get notified on Discord', href: DISCORD_URL },
-    },
-    {
         name: 'Self-host', price: 'Free', cadence: 'Your call', perHour: 240,
         body: 'Run it on your own server with your own Finnhub keys: realtime quotes and alerts for you and your team.',
         cta: { label: 'Setup guide', href: '#self-host' },
@@ -38,11 +32,6 @@ const TIERS = [
 ];
 
 const SUPPORT = [
-    {
-        icon: HeartHandshake, title: 'Sponsor', primary: true,
-        body: 'Monthly tiers from $5, a one-time gift, or a custom partnership. Sponsors are shown on this site, in the app and in the README.',
-        cta: { label: 'See sponsor tiers', href: '/sponsor' },
-    },
     {
         icon: GitPullRequest, title: 'Contribute',
         body: 'Pick a good first issue, improve the docs or design a screen. Every merged pull request keeps RandomInvestigation moving.',
@@ -68,34 +57,12 @@ const CadenceRail = ({ perHour }: { perHour: number }) => (
     />
 );
 
-// Floats in the empty gutter beside the 1200px column, so it only shows on screens wide enough to have one.
-const SponsorBanner = () => {
-    const [sponsor] = sidebarSponsors();
-    if (!sponsor) return null;
-    return (
-        <aside aria-label="Sponsor" className="fixed top-[130px] z-30 hidden w-[200px] right-[calc((100vw-1200px)/4-100px)] min-[1680px]:block">
-            <a href={sponsor.url} target="_blank" rel="noreferrer" className="hatch group">
-                <div className="card flex flex-col gap-4 p-5">
-                    <p className="kicker flex items-center gap-1.5 text-brand-ink"><span className="live-dot" /> Sponsor</p>
-                    {sponsor.logo && <img src={sponsor.logo} alt={sponsor.iconOnly ? '' : sponsor.name} className="h-14 w-auto self-start" />}
-                    <div>
-                        <p className="text-[17px] font-bold tracking-[-0.02em]">{sponsor.name}</p>
-                        {sponsor.blurb && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{sponsor.blurb}</p>}
-                    </div>
-                    <span className="btn btn-ghost h-9 text-[13px] group-hover:bg-[var(--hover)] group-hover:text-foreground">Visit {sponsor.name} <ArrowUpRight /></span>
-                </div>
-            </a>
-        </aside>
-    );
-};
-
 export default async function LandingPage() {
     const [session, repo] = await Promise.all([getSession(), getRepoStats()]);
     const start = session?.user ? { href: '/dashboard', label: 'Open dashboard' } : { href: '/sign-up', label: 'Get started free' };
 
     return (
         <>
-            <SponsorBanner />
             <section className="mx-auto grid max-w-[1200px] items-center gap-12 px-5 pt-14 md:pt-20 lg:grid-cols-[minmax(0,1fr)_320px]">
                 <div>
                     <MarketStatus />
@@ -144,9 +111,8 @@ export default async function LandingPage() {
                             <div className="card flex h-full flex-col gap-4 p-5">
                                 <div className="flex items-center justify-between gap-3">
                                     <h3 className="text-[18px] font-bold tracking-[-0.02em]">{tier.name}</h3>
-                                    {tier.tag && <span className="pill is-brand">{tier.tag}</span>}
                                 </div>
-                                <p className="bento-value text-[30px]">{tier.price}{tier.per && <small className="text-faint"> {tier.per}</small>}</p>
+                                <p className="bento-value text-[30px]">{tier.price}</p>
                                 <p className="text-[14px] leading-relaxed text-muted-foreground">{tier.body}</p>
                                 <div className="mt-auto flex flex-col gap-2">
                                     <CadenceRail perHour={tier.perHour} />
@@ -189,20 +155,20 @@ export default async function LandingPage() {
                 </div>
             </section>
 
-            <section id="sponsor" className="mx-auto mt-28 max-w-[1200px] scroll-mt-24 px-5">
+            <section id="support" className="mx-auto mt-28 max-w-[1200px] scroll-mt-24 px-5">
                 <SectionHead
                     kicker="Support"
-                    title="RandomInvestigation is open for sponsors."
-                    sub="It stays free because people and companies back it. Pay what you can, or give time instead."
+                    title="Keep RandomInvestigation free."
+                    sub="Contribute code, or spread the word. Every bit helps."
                 />
-                <div className="grid gap-3 lg:grid-cols-3">
-                    {SUPPORT.map(({ icon, title, body, cta, primary }) => (
+                <div className="grid gap-3 lg:grid-cols-2">
+                    {SUPPORT.map(({ icon, title, body, cta }) => (
                         <IconCard
                             key={title}
                             icon={icon}
                             title={title}
                             footer={
-                                <a href={cta.href} {...(cta.href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})} className={cn('btn w-full', primary ? 'btn-primary' : 'btn-ghost')}>
+                                <a href={cta.href} {...(cta.href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})} className={cn('btn btn-ghost w-full')}>
                                     {cta.label}
                                 </a>
                             }

@@ -11,7 +11,7 @@ export const metadata = {
 
 const DATA_MODES = [
     { name: 'Cached', cadence: 'Hourly', body: 'Default for the public site. Quotes are fetched once an hour and shared by every user, so cost grows with symbols, not people.' },
-    { name: 'Realtime', cadence: 'Every 15 seconds', body: 'For RandomInvestigation Cloud and self-hosting. Set NEXT_PUBLIC_OPENSTOCK_DATA_MODE=realtime and on-screen prices refresh live and email price alerts turn on.' },
+    { name: 'Realtime', cadence: 'Every 15 seconds', body: 'For self-hosting. Set NEXT_PUBLIC_OPENSTOCK_DATA_MODE=realtime and on-screen prices refresh live and email price alerts turn on.' },
 ];
 
 const COVERAGE = [

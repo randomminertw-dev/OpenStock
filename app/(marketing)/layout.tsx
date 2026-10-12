@@ -4,7 +4,6 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { getSession } from "@/lib/better-auth/auth";
 import { formatCount, getRepoStats } from "@/lib/github";
 import OpenDevSocietyBranding from "@/components/OpenDevSocietyBranding";
-import SponsorsBand from "@/components/sponsors/SponsorsBand";
 import { DISCORD_URL, REPO_URL } from "@/lib/constants";
 
 const FOOTER_LINKS = [
@@ -12,7 +11,6 @@ const FOOTER_LINKS = [
     { href: '/help', label: 'Help' },
     { href: '/api-docs', label: 'Architecture' },
     { href: '/terms', label: 'Terms' },
-    { href: '/sponsor', label: 'Sponsor' },
     { href: REPO_URL, label: 'GitHub' },
     { href: DISCORD_URL, label: 'Discord' },
     { href: 'https://www.linkedin.com/company/opendevsociety-in/', label: 'LinkedIn' },
@@ -33,9 +31,6 @@ export default async function MarketingLayout({ children }: { children: React.Re
                         {[['/#inside', 'Product'], ['/#data', 'Data'], ['/#self-host', 'Self-host'], ['/about', 'About']].map(([href, label]) => (
                             <Link key={href} href={href} className="side-item h-8 font-semibold">{label}</Link>
                         ))}
-                        <Link href="/sponsor" className="side-item h-8 gap-2 font-semibold text-brand-ink hover:text-brand-ink">
-                            <span className="live-dot" /> Sponsor
-                        </Link>
                     </nav>
                     <div className="ml-auto flex items-center gap-2">
                         <a href={REPO_URL} target="_blank" rel="noreferrer" className="btn btn-ghost hidden h-9 px-3 sm:inline-flex" aria-label="RandomInvestigation on GitHub">
@@ -56,12 +51,13 @@ export default async function MarketingLayout({ children }: { children: React.Re
 
             <main>{children}</main>
 
-            <SponsorsBand />
-
             <footer className="mx-auto mt-24 flex max-w-[1200px] flex-col gap-6 px-5 pb-10 md:flex-row md:items-center md:justify-between">
                 <div className="flex flex-col gap-3">
                     <BrandLogo markSize={26} />
                     <p className="text-[13px] text-faint">© {new Date().getFullYear()} Open Dev Society · AGPL-3.0</p>
+                    <p className="max-w-[420px] text-[12px] leading-relaxed text-faint">
+                        本站為 OpenStock 的修改版（fork），由 randomminertw-dev 維護。原始專案 © Open Dev Society，以 AGPL-3.0 授權釋出；本站修改版同樣遵循 AGPL-3.0，原始碼見 GitHub 連結。
+                    </p>
                 </div>
                 <nav className="flex flex-wrap gap-x-5 gap-y-2 text-[13px] font-semibold text-muted-foreground">
                     {FOOTER_LINKS.map(({ href, label }) => (
