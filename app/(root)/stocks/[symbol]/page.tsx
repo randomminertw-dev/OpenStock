@@ -11,8 +11,7 @@ import {
     COMPANY_FINANCIALS_WIDGET_CONFIG,
 } from "@/lib/constants";
 import { getStockSentimentInsights } from '@/lib/actions/adanos.actions';
-import { getFactorAssessment } from '@/lib/actions/factors.actions';
-import StockFactorsPanel from "@/components/stocks/StockFactorsPanel";
+import IndicatorDashboard from "@/components/stocks/IndicatorDashboard";
 import { isCoinGeckoSymbol } from "@/lib/coingecko";
 import { formatSymbolForTradingView, isChartEmbeddable, tradingViewSymbolUrl } from '@/lib/utils';
 
@@ -29,11 +28,11 @@ async function Sentiment({ symbol }: { symbol: string }) {
 }
 
 async function Factors({ symbol }: { symbol: string }) {
-    const assessment = await getFactorAssessment(symbol);
-    if (!assessment || assessment.factors.length === 0) return null;
+    // CoinGecko coins have no Finnhub candles; skip the panel entirely.
+    if (isCoinGeckoSymbol(symbol)) return null;
     return (
-        <Panel title="Factors" sub="多空因素儀表板 · 技術指標與新聞情緒">
-            <StockFactorsPanel symbol={symbol} />
+        <Panel title="技術指標投票" sub="57 項指標分歧監控 · IDS">
+            <IndicatorDashboard symbol={symbol} />
         </Panel>
     );
 }
