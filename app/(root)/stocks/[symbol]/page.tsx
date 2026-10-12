@@ -11,6 +11,8 @@ import {
     COMPANY_FINANCIALS_WIDGET_CONFIG,
 } from "@/lib/constants";
 import { getStockSentimentInsights } from '@/lib/actions/adanos.actions';
+import { getFactorAssessment } from '@/lib/actions/factors.actions';
+import StockFactorsPanel from "@/components/stocks/StockFactorsPanel";
 import { formatSymbolForTradingView, isChartEmbeddable, tradingViewSymbolUrl } from '@/lib/utils';
 
 const scriptUrl = `https://s3.tradingview.com/external-embedding/embed-widget-`;
@@ -21,6 +23,16 @@ async function Sentiment({ symbol }: { symbol: string }) {
     return (
         <Panel title="Sentiment" sub="Reddit, X.com, news and Polymarket">
             <StockSentimentCard insight={insight} />
+        </Panel>
+    );
+}
+
+async function Factors({ symbol }: { symbol: string }) {
+    const assessment = await getFactorAssessment(symbol);
+    if (!assessment || assessment.factors.length === 0) return null;
+    return (
+        <Panel title="Factors" sub="多空因素儀表板 · 技術指標與新聞情緒">
+            <StockFactorsPanel symbol={symbol} />
         </Panel>
     );
 }
@@ -91,6 +103,12 @@ export default async function StockDetails({ params }: StockDetailsPageProps) {
                         />
                     </Panel>
                 </div>
+            </div>
+
+            <div className="mt-3">
+                <Suspense fallback={null}>
+                    <Factors symbol={symbol} />
+                </Suspense>
             </div>
         </>
     );

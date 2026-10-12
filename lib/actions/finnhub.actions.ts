@@ -220,6 +220,29 @@ export async function getWatchlistData(symbols: string[]) {
 }
 
 
+type FinnhubCandleResponse = {
+    c?: number[]; // close prices
+    t?: number[]; // unix timestamps (seconds)
+    s?: string;   // status: 'ok' | 'no_data' | ...
+};
+
+export async function getCandles(symbol: string, resolution = 'D', days = 120) {
+    try {
+        const to = Math.floor(Date.now() / 1000);
+        const from = to - days * 86400;
+        const url =
+            `${FINNHUB_BASE_URL}/stock/candle?symbol=${encodeURIComponent(symbol)}` +
+            `&resolution=${resolution}&from=${from}&to=${to}`;
+        // Daily candles barely move intraday: cache for an hour
+        const data = await fetchJSON<FinnhubCandleResponse>(url, 3600);
+        if (!data || data.s !== 'ok' || !Array.isArray(data.c) || data.c.length === 0) return null;
+        return { c: data.c, t: Array.isArray(data.t) ? data.t : [], s: data.s as string };
+    } catch (e) {
+        logFailure('candles', symbol, e);
+        return null;
+    }
+}
+
 export async function getNews(symbols?: string[]): Promise<MarketNewsArticle[]> {
     try {
         const range = getDateRange(5);
