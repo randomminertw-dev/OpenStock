@@ -4,7 +4,7 @@ import PageHero from '@/components/marketing/PageHero';
 import SectionHead from '@/components/marketing/SectionHead';
 
 export const metadata: Metadata = {
-    title: 'Terms of Service | OpenStock',
+    title: 'Terms of Service | RandomInvestigation',
     description: 'Fair, transparent, and open terms for our community.',
 };
 
@@ -17,7 +17,7 @@ const PROMISES = [
 
 const RULES = {
     do: ['Share knowledge freely', 'Use the API for personal projects', 'Respect other members'],
-    dont: ['Scrape data excessively', 'Share API keys', 'Use OpenStock for high-frequency trading'],
+    dont: ['Scrape data excessively', 'Share API keys', 'Use RandomInvestigation for high-frequency trading'],
 };
 
 export default function TermsPage() {
@@ -36,7 +36,7 @@ export default function TermsPage() {
                         <div>
                             <h2 className="font-bold text-warn">Investment disclaimer</h2>
                             <p className="mt-2 max-w-3xl leading-relaxed text-muted-foreground">
-                                <strong className="text-foreground">OpenStock is an educational and analysis tool, not a financial advisor.</strong>{' '}
+                                <strong className="text-foreground">RandomInvestigation is an educational and analysis tool, not a financial advisor.</strong>{' '}
                                 Data is provided as is, for information only. Never invest money you cannot afford to lose. Always do your own
                                 research or consult a certified professional before making financial decisions.
                             </p>

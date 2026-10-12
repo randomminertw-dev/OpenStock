@@ -6,8 +6,8 @@ import IconCard from '@/components/marketing/IconCard';
 import { GOOD_FIRST_ISSUES_URL, REPO_URL } from '@/lib/constants';
 
 export const metadata = {
-    title: 'About | OpenStock',
-    description: 'The story behind OpenStock and the Open Dev Society.',
+    title: 'About | RandomInvestigation',
+    description: 'The story behind RandomInvestigation and the Open Dev Society.',
 };
 
 const PRINCIPLES = [
@@ -22,7 +22,7 @@ export default function AboutPage() {
             <PageHero
                 kicker="About"
                 title="Tools for everyone."
-                sub="We believe financial intelligence shouldn’t be locked behind paywalls. OpenStock is built by the community, for the community."
+                sub="We believe financial intelligence shouldn’t be locked behind paywalls. RandomInvestigation is built by the community, for the community."
             >
                 <a href={REPO_URL} target="_blank" rel="noreferrer" className="btn btn-primary h-11 px-5 text-[15px]">See the code</a>
                 <a href={GOOD_FIRST_ISSUES_URL} target="_blank" rel="noreferrer" className="btn btn-ghost h-11 px-5 text-[15px]">Contribute</a>
@@ -42,7 +42,7 @@ export default function AboutPage() {
                             <p className="kicker text-brand-ink">Open Dev Society</p>
                             <h2 className="text-[30px] font-bold leading-tight tracking-[-0.04em]">Born from a simple frustration.</h2>
                             <p className="text-[16px] leading-relaxed text-muted-foreground">
-                                Why are powerful financial tools so expensive? OpenStock is our answer.
+                                Why are powerful financial tools so expensive? RandomInvestigation is our answer.
                             </p>
                             <p className="text-[16px] leading-relaxed text-muted-foreground">
                                 We are a collective of developers, designers and financial enthusiasts working under the Open Dev Society

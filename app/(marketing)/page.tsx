@@ -12,7 +12,7 @@ import { DISCORD_URL, GOOD_FIRST_ISSUES_URL, REPO_URL } from "@/lib/constants";
 
 const FEATURES = [
     { icon: CandlestickChart, title: 'Charts that move', body: 'TradingView candles, technicals and financials for any listed company, full screen when you need room.' },
-    { icon: Bell, title: 'Alerts by email', body: 'With OpenStock Cloud, set a target above or below the price. We check every five minutes and write when it crosses.' },
+    { icon: Bell, title: 'Alerts by email', body: 'With RandomInvestigation Cloud, set a target above or below the price. We check every five minutes and write when it crosses.' },
     { icon: MessagesSquare, title: 'Sentiment in one read', body: 'Buzz and bullishness from Reddit, X.com, news and Polymarket, side by side for each stock.' },
     { icon: Grid3x3, title: 'The whole market', body: 'Sector heatmap, movers and top stories on one screen before the bell.' },
     { icon: Command, title: 'Find anything with ⌘K', body: 'Search every exchange Finnhub covers and open a stock as a tab, like a browser.' },
@@ -26,7 +26,7 @@ const TIERS = [
         cta: { label: 'Get started', href: '/sign-up' },
     },
     {
-        name: 'OpenStock Cloud', price: '$5', per: '/month', tag: 'Coming soon', cadence: 'Every 15 seconds', perHour: 240,
+        name: 'RandomInvestigation Cloud', price: '$5', per: '/month', tag: 'Coming soon', cadence: 'Every 15 seconds', perHour: 240,
         body: 'The same app with live quotes and email price alerts, hosted on a pool of market data keys. Nothing to set up.',
         cta: { label: 'Get notified on Discord', href: DISCORD_URL },
     },
@@ -45,7 +45,7 @@ const SUPPORT = [
     },
     {
         icon: GitPullRequest, title: 'Contribute',
-        body: 'Pick a good first issue, improve the docs or design a screen. Every merged pull request keeps OpenStock moving.',
+        body: 'Pick a good first issue, improve the docs or design a screen. Every merged pull request keeps RandomInvestigation moving.',
         cta: { label: 'Good first issues', href: GOOD_FIRST_ISSUES_URL },
     },
     {
@@ -103,7 +103,7 @@ export default async function LandingPage() {
                         Markets, minus<br />the paywall.
                     </h1>
                     <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-muted-foreground">
-                        OpenStock is an open-source alternative to expensive market platforms. Track prices, watch the whole market and dig into
+                        RandomInvestigation is an open-source alternative to expensive market platforms. Track prices, watch the whole market and dig into
                         company insights, built openly, for everyone.
                     </p>
                     <div className="mt-8 flex flex-wrap items-center gap-2">
@@ -180,7 +180,7 @@ export default async function LandingPage() {
                 <div className="hatch">
                     <pre className="card mono overflow-x-auto p-5 text-[13px] leading-7 text-muted-foreground">
                         <span className="text-faint">$ </span><span className="text-foreground">git clone {REPO_URL}.git</span>{'\n'}
-                        <span className="text-faint">$ </span><span className="text-foreground">cd OpenStock</span>{'\n\n'}
+                        <span className="text-faint">$ </span><span className="text-foreground">cd randominvestigation</span>{'\n\n'}
                         <span className="text-faint"># .env (every variable is in the README)</span>{'\n'}
                         <span className="text-brand-ink">FINNHUB_API_KEYS</span>=key_one,key_two,key_three{'\n'}
                         <span className="text-brand-ink">NEXT_PUBLIC_OPENSTOCK_DATA_MODE</span>=realtime{'\n\n'}
@@ -192,7 +192,7 @@ export default async function LandingPage() {
             <section id="sponsor" className="mx-auto mt-28 max-w-[1200px] scroll-mt-24 px-5">
                 <SectionHead
                     kicker="Support"
-                    title="OpenStock is open for sponsors."
+                    title="RandomInvestigation is open for sponsors."
                     sub="It stays free because people and companies back it. Pay what you can, or give time instead."
                 />
                 <div className="grid gap-3 lg:grid-cols-3">

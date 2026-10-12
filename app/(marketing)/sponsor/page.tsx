@@ -6,11 +6,11 @@ import { ACTIVE_SPONSORS, FUNDING_USES, REGISTERED_USERS, SPONSOR_CONTACT_EMAIL,
 import { cn } from "@/lib/utils";
 
 export const metadata = {
-    title: 'Sponsor OpenStock',
+    title: 'Sponsor RandomInvestigation',
     description: 'Back free, open-source market data. Monthly tiers, one-time gifts, or talk with us about a partnership.',
 };
 
-const MAILTO = `mailto:${SPONSOR_CONTACT_EMAIL}?subject=Sponsoring%20OpenStock`;
+const MAILTO = `mailto:${SPONSOR_CONTACT_EMAIL}?subject=Sponsoring%20RandomInvestigation`;
 
 // Where each tier shows up. Mirrors the perks in lib/sponsors.ts.
 const PLACEMENTS: { label: string; from: SponsorTierId }[] = [
@@ -41,7 +41,7 @@ export default async function SponsorPage() {
                     <p className="kicker flex items-center gap-2 text-brand-ink"><span className="live-dot" /> Open for sponsors</p>
                     <h1 className="mt-4 text-[44px] font-bold leading-[1.02] tracking-[-0.05em] md:text-[64px]">Back free<br />market data.</h1>
                     <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-muted-foreground">
-                        OpenStock is an open-source market terminal used by {REGISTERED_USERS} registered people{repo ? `, with ${formatCount(repo.stars)} stars on GitHub` : ''}.
+                        RandomInvestigation is an open-source market terminal used by {REGISTERED_USERS} registered people{repo ? `, with ${formatCount(repo.stars)} stars on GitHub` : ''}.
                         Sponsors keep it free and independent for everyone who can’t pay for a terminal.
                     </p>
                     <div className="mt-8 flex flex-wrap gap-2">
@@ -147,7 +147,7 @@ export default async function SponsorPage() {
                 <p className="mt-3 max-w-2xl text-[16px] text-muted-foreground">
                     Sponsorships are paid through GitHub Sponsors to {SPONSOR_RECIPIENT.name}{' '}
                     (<a href={`https://github.com/${SPONSOR_RECIPIENT.handle}`} target="_blank" rel="noreferrer" className="font-semibold text-brand-ink hover:underline">@{SPONSOR_RECIPIENT.handle}</a>),{' '}
-                    {SPONSOR_RECIPIENT.role}, and pay for keeping OpenStock free:
+                    {SPONSOR_RECIPIENT.role}, and pay for keeping RandomInvestigation free:
                 </p>
                 <div className="hatch mt-8">
                     <div className="card row-list">
@@ -170,18 +170,18 @@ export default async function SponsorPage() {
                 {fundingTotal > 0 && (
                     <p className="num mt-4 text-muted-foreground">
                         {FUNDING_USES.every((use) => use.monthly)
-                            ? <>Running OpenStock costs about <b className="text-foreground">${fundingTotal} a month</b>.</>
+                            ? <>Running RandomInvestigation costs about <b className="text-foreground">${fundingTotal} a month</b>.</>
                             : <>Known costs so far: <b className="text-foreground">${fundingTotal} a month</b>.</>}
                     </p>
                 )}
 
                 <div className="mt-10 grid gap-3 md:grid-cols-2">
-                    <IconCard icon={Cloud} title="OpenStock Cloud will pay for hosting">
+                    <IconCard icon={Cloud} title="RandomInvestigation Cloud will pay for hosting">
                         Cloud ($5 a month, coming soon) adds live quotes and price alerts. Its subscribers will cover the servers, database and
                         market data the hosted app needs, so the free site stays online without depending on donations.
                     </IconCard>
                     <IconCard icon={Users} title="Sponsors keep the community moving">
-                        Sponsorships pay for the time behind OpenStock: reviewing community pull requests, fixing bugs and shipping features
+                        Sponsorships pay for the time behind RandomInvestigation: reviewing community pull requests, fixing bugs and shipping features
                         at the pace {REGISTERED_USERS} people expect, with the core free for everyone.
                     </IconCard>
                 </div>

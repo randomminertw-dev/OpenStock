@@ -9,7 +9,7 @@ import { getUserWatchlist } from "@/lib/actions/watchlist.actions";
 import { getUserAlerts } from "@/lib/actions/alert.actions";
 import { alertsEnabled } from "@/lib/market-data";
 
-export const metadata = { title: 'Profile | OpenStock' };
+export const metadata = { title: 'Profile | RandomInvestigation' };
 
 const METHOD_LABELS: Record<string, string> = {
     credential: 'Email and password',

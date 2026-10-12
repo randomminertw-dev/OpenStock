@@ -5,13 +5,13 @@ import IconCard from '@/components/marketing/IconCard';
 import { REPO_URL } from '@/lib/constants';
 
 export const metadata = {
-    title: 'Architecture | OpenStock',
-    description: 'How OpenStock works: market data, background jobs and the AI behind the emails.',
+    title: 'Architecture | RandomInvestigation',
+    description: 'How RandomInvestigation works: market data, background jobs and the AI behind the emails.',
 };
 
 const DATA_MODES = [
     { name: 'Cached', cadence: 'Hourly', body: 'Default for the public site. Quotes are fetched once an hour and shared by every user, so cost grows with symbols, not people.' },
-    { name: 'Realtime', cadence: 'Every 15 seconds', body: 'For OpenStock Cloud and self-hosting. Set NEXT_PUBLIC_OPENSTOCK_DATA_MODE=realtime and on-screen prices refresh live and email price alerts turn on.' },
+    { name: 'Realtime', cadence: 'Every 15 seconds', body: 'For RandomInvestigation Cloud and self-hosting. Set NEXT_PUBLIC_OPENSTOCK_DATA_MODE=realtime and on-screen prices refresh live and email price alerts turn on.' },
 ];
 
 const COVERAGE = [
@@ -44,7 +44,7 @@ export default function ArchitecturePage() {
         <>
             <PageHero
                 kicker="Architecture"
-                title="How OpenStock works."
+                title="How RandomInvestigation works."
                 sub="A transparent look at the event-driven, multi-provider system behind your market data and emails."
             >
                 <span className="pill h-8 px-3">v1.0.0</span>
