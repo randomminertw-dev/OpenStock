@@ -15,8 +15,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { computeIDS } from './ids';
+import { computeIDS, computeIDSFactor, computeIDSPeriod } from './ids';
 import type { Category, IndicatorResult, Signal } from './types';
+import type { VariantResult } from './variants';
+import type { FactorScore } from './factors';
 
 let seq = 0;
 
@@ -191,5 +193,136 @@ describe('computeIDS — null-signal (N/A) exclusion', () => {
     expect(r.coveragePct).toBeCloseTo(90, 6);
     expect(r.direction).toBe('bullish');
     expectSane(r);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* v1.1 Task 3: 三層 IDS — Level 1 IDS-Period、Level 3 IDS-Factor        */
+/* ------------------------------------------------------------------ */
+
+/** 變體測試夾具（value 與 signal 一致性由呼叫方保證）。 */
+function variantFixture(
+  n: number,
+  signal: Signal | null,
+  indicatorId: VariantResult['indicatorId'] = 'RSI',
+): VariantResult {
+  const formula = indicatorId === 'CMF' ? 'v1' : 'wilder_v1';
+  return {
+    variantId: `${indicatorId}__n${n}__${formula}`,
+    indicatorId,
+    n,
+    value: signal === null ? null : 50,
+    signal,
+  };
+}
+
+/** 因素測試夾具。 */
+function factorFixture(
+  id: 'T' | 'M' | 'V' | 'R',
+  score: number | null,
+): FactorScore {
+  return { id, score, n: 14, formulaVersion: 'test', reason: 'test fixture' };
+}
+
+/** 容差 0.01 的近似相等斷言（規格算例用）。 */
+function expectPctClose(actual: number | null, expected: number): void {
+  expect(actual).not.toBeNull();
+  expect(Math.abs((actual as number) - expected)).toBeLessThan(0.01);
+}
+
+describe('computeIDSPeriod — 規格 §6.5.1 / §6.5.4', () => {
+  it('RSI 五週期 +/+/+/+/−（同權）→ idsPct === 40.0', () => {
+    const variants = [7, 14, 20, 21, 28].map((n, i) =>
+      variantFixture(n, i < 4 ? 1 : -1),
+    );
+    const r = computeIDSPeriod(variants);
+    expect(r.validCount).toBe(5);
+    expectPctClose(r.idsPct, 40.0);
+  });
+
+  it('五個全中立 → idsPct 為 null（不是 0%）', () => {
+    const variants = [7, 14, 20, 21, 28].map((n) => variantFixture(n, 0));
+    const r = computeIDSPeriod(variants);
+    expect(r.validCount).toBe(5);
+    expect(r.idsPct).toBeNull();
+  });
+
+  it('signal 為 null 的變體不計入 validCount', () => {
+    const variants = [
+      variantFixture(7, 1),
+      variantFixture(14, null),
+      variantFixture(20, -1),
+    ];
+    const r = computeIDSPeriod(variants);
+    expect(r.validCount).toBe(2);
+    // 1 上 1 下 → A=2，IDS = 100×(1−0/2) = 100
+    expectPctClose(r.idsPct, 100.0);
+  });
+
+  it('空陣列 → idsPct 為 null，validCount 為 0', () => {
+    const r = computeIDSPeriod([]);
+    expect(r.validCount).toBe(0);
+    expect(r.idsPct).toBeNull();
+  });
+});
+
+describe('computeIDSFactor — 規格 §6.5.3', () => {
+  it('T=+70, M=+40, V=−20 → 三票 2 上 1 下，idsPct = 66.67', () => {
+    const r = computeIDSFactor({
+      T: factorFixture('T', 70),
+      M: factorFixture('M', 40),
+      V: factorFixture('V', -20),
+    });
+    expect(r.validCount).toBe(3);
+    // 100×(1−|2−1|/3) = 66.6667…
+    expectPctClose(r.idsPct, 66.67);
+    expect(r.upPct).toBeCloseTo(66.67, 2);
+    expect(r.downPct).toBeCloseTo(33.33, 2);
+    expect(r.neutralPct).toBeCloseTo(0, 6);
+  });
+
+  it('任一因素 score 為 null → 只用有效的算', () => {
+    const r = computeIDSFactor({
+      T: factorFixture('T', null),
+      M: factorFixture('M', 40),
+      V: factorFixture('V', -20),
+    });
+    expect(r.validCount).toBe(2);
+    // 1 上 1 下 → IDS = 100
+    expectPctClose(r.idsPct, 100.0);
+  });
+
+  it('|score|≤5 視為中立票（邊界值 ±5 亦然）', () => {
+    const r = computeIDSFactor({
+      T: factorFixture('T', 5),
+      M: factorFixture('M', -5),
+      V: factorFixture('V', 70),
+    });
+    expect(r.validCount).toBe(3);
+    // 票：0、0、+1 → A=1，IDS = 100×(1−1/1) = 0
+    expectPctClose(r.idsPct, 0.0);
+    expect(r.neutralPct).toBeCloseTo(66.67, 2);
+  });
+
+  it('三個全 null → idsPct 為 null，validCount 為 0', () => {
+    const r = computeIDSFactor({
+      T: factorFixture('T', null),
+      M: factorFixture('M', null),
+      V: factorFixture('V', null),
+    });
+    expect(r.validCount).toBe(0);
+    expect(r.idsPct).toBeNull();
+  });
+
+  it('R 不參與：額外傳入 R 也不影響結果', () => {
+    const base = {
+      T: factorFixture('T', 70),
+      M: factorFixture('M', 40),
+      V: factorFixture('V', -20),
+    };
+    const withR = { ...base, R: factorFixture('R', -99) };
+    const r = computeIDSFactor(withR);
+    expect(r.validCount).toBe(3);
+    expectPctClose(r.idsPct, 66.67);
   });
 });
