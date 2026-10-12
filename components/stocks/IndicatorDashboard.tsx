@@ -1,10 +1,13 @@
-import { TrendingUp, TrendingDown, Minus, Scale, Newspaper } from 'lucide-react';
-import { getIndicatorAssessment } from '@/lib/actions/indicators.actions';
+import { TrendingUp, TrendingDown, Minus, Scale, Newspaper, ChevronDown } from 'lucide-react';
+import { getFactorAssessment, getIndicatorAssessment } from '@/lib/actions/indicators.actions';
 import { getNews } from '@/lib/actions/finnhub.actions';
 import { scoreNewsSentiment } from '@/lib/factors/scoring';
 import { cn } from '@/lib/utils';
 import IndicatorTable, { CATEGORY_LABEL } from './IndicatorTable';
+import FactorCards from './FactorCards';
+import PeriodExplorer from './PeriodExplorer';
 import type { Category, IDSResult, IndicatorResult } from '@/lib/indicators/types';
+import type { IDSFactorResult, IDSPeriodResult } from '@/lib/indicators/ids';
 
 const DIRECTION_META: Record<IDSResult['direction'], { label: string; symbol: string; pill: string; text: string; Icon: typeof TrendingUp }> = {
     bullish: { label: '看漲', symbol: '▲', pill: 'pill is-up', text: 'text-up', Icon: TrendingUp },
@@ -13,6 +16,15 @@ const DIRECTION_META: Record<IDSResult['direction'], { label: string; symbol: st
 };
 
 const CATEGORIES: Category[] = ['trend', 'momentum', 'volatility', 'volume', 'support', 'breadth'];
+
+// v1.1 IDS-Period 的四個指標（與 PeriodExplorer 頁籤一致）。
+const PERIOD_IDS = ['RSI', 'ADX_DMI', 'CMF', 'ATR'] as const;
+const PERIOD_LABEL: Record<(typeof PERIOD_IDS)[number], string> = {
+    RSI: 'RSI',
+    ADX_DMI: 'ADX/DMI',
+    CMF: 'CMF',
+    ATR: 'ATR%',
+};
 
 function fmtPct(v: number | null, digits = 1): string {
     if (v === null || !Number.isFinite(v)) return 'N/A';
@@ -133,8 +145,64 @@ async function NewsSentimentCard({ symbol }: { symbol: string }) {
     );
 }
 
+/** 三層 IDS 並排：IDS-Period / IDS-Indicator / IDS-Factor，各層獨立解讀。 */
+function MultiLevelIds({
+    ids,
+    idsPeriod,
+    idsFactor,
+}: {
+    ids: IDSResult;
+    idsPeriod: Record<string, IDSPeriodResult>;
+    idsFactor: IDSFactorResult;
+}) {
+    return (
+        <div className="border-t border-line px-3 py-2.5">
+            <p className="kicker">三層分歧分數 IDS</p>
+            <p className="mt-0.5 text-[11.5px] leading-snug text-faint">
+                各層獨立解讀，不合成單一信心分數
+            </p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+                <div className="rounded-xl border border-line px-2.5 py-2">
+                    <p className="text-[11px] font-bold text-foreground">IDS-Period</p>
+                    <p className="text-[10.5px] text-faint">期間內分歧</p>
+                    <ul className="mt-1.5 space-y-1">
+                        {PERIOD_IDS.map((id) => (
+                            <li key={id} className="flex items-center justify-between gap-1 text-[11px]">
+                                <span className="text-faint">{PERIOD_LABEL[id]}</span>
+                                <span className="num font-bold text-foreground">
+                                    {fmtPct(idsPeriod[id]?.idsPct ?? null)}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+                <div className="rounded-xl border border-line px-2.5 py-2">
+                    <p className="text-[11px] font-bold text-foreground">IDS-Indicator</p>
+                    <p className="text-[10.5px] text-faint">57 指標分歧</p>
+                    <p className="num mt-1.5 text-[22px] font-bold leading-none text-foreground">
+                        {fmtPct(ids.idsPct)}
+                    </p>
+                </div>
+                <div className="rounded-xl border border-line px-2.5 py-2">
+                    <p className="text-[11px] font-bold text-foreground">IDS-Factor</p>
+                    <p className="text-[10.5px] text-faint">四因素分歧</p>
+                    <p className="num mt-1.5 text-[22px] font-bold leading-none text-foreground">
+                        {fmtPct(idsFactor.idsPct)}
+                    </p>
+                    <p className="num mt-1 text-[10.5px] text-faint">
+                        n={idsFactor.validCount}/3{idsFactor.validCount === 1 ? '・證據不足' : ''}
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default async function IndicatorDashboard({ symbol }: { symbol: string }) {
-    const assessment = await getIndicatorAssessment(symbol);
+    const [assessment, factorAssessment] = await Promise.all([
+        getIndicatorAssessment(symbol),
+        getFactorAssessment(symbol),
+    ]);
     if (!assessment) {
         return (
             <div className="empty-state py-10">
@@ -154,6 +222,23 @@ export default async function IndicatorDashboard({ symbol }: { symbol: string })
             <ResultCard ids={ids} />
             <CategoryOverview results={results} />
             <IndicatorTable results={results} />
+            {factorAssessment && (
+                <>
+                    <FactorCards symbol={symbol} />
+                    <MultiLevelIds
+                        ids={ids}
+                        idsPeriod={factorAssessment.idsPeriod}
+                        idsFactor={factorAssessment.idsFactor}
+                    />
+                    <details className="group border-t border-line">
+                        <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-hover/50 [&::-webkit-details-marker]:hidden">
+                            <span className="text-[13px] font-bold text-foreground">期間探索</span>
+                            <ChevronDown className="size-4 text-faint transition-transform group-open:rotate-180" />
+                        </summary>
+                        <PeriodExplorer variants={factorAssessment.variants} />
+                    </details>
+                </>
+            )}
             <NewsSentimentCard symbol={symbol} />
             <p className="border-t border-line px-3 py-2.5 text-[11.5px] leading-relaxed text-faint">
                 技術指標投票僅供參考，不構成投資建議。
