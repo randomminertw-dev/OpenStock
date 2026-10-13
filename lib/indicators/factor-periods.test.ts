@@ -3,7 +3,7 @@ import { defaultFactorPreference, marketForSymbol, parseFactorPreference, preset
 import type { FactorMarket } from './factor-periods';
 
 describe('factor preferences', () => {
-  it.each([['BINANCE:BTCUSDT', 'crypto'], ['CG:bitcoin', 'crypto'], ['2330.TW', 'taiwan'], ['AAPL', 'us'], ['0700.HK', null]])('maps %s to its supported market', (symbol, market) => {
+  it.each([['BINANCE:BTCUSDT', 'crypto'], ['CG:bitcoin', 'crypto'], ['2330.TW', 'taiwan'], ['TWSE:2330', 'taiwan'], ['6488.TWO', 'taiwan'], ['AAPL', 'us'], ['BRK.B', 'us'], ['BRK-B', 'us'], ['0700.HK', null], ['VOD.L', null]])('maps %s to its supported market', (symbol, market) => {
     expect(marketForSymbol(symbol!)).toBe(market);
   });
 

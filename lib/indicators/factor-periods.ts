@@ -1,4 +1,5 @@
 import type { FactorId } from './factors';
+import { candleMarket } from '@/lib/candles/symbols';
 
 export type FactorMarket = 'us' | 'taiwan' | 'crypto';
 export type CryptoInterval = '4h' | '8h' | '12h' | '1d';
@@ -19,11 +20,14 @@ const PRESET_PERIODS = {
 };
 
 export function marketForSymbol(symbol: string): FactorMarket | null {
-  const normalized = symbol.trim().toUpperCase();
-  if (/^(BINANCE|CG):.+$/.test(normalized)) return 'crypto';
-  if (/^\d+\.TW$/.test(normalized)) return 'taiwan';
-  if (/^[A-Z]+(?:[.-][A-Z])?$/.test(normalized)) return 'us';
-  return null;
+  const market = candleMarket(symbol);
+  switch (market.kind) {
+    case 'binance':
+    case 'coingecko': return 'crypto';
+    case 'taiwan': return 'taiwan';
+    case 'us': return 'us';
+    default: return null;
+  }
 }
 
 function uniformPeriods(n: number): FactorPeriods {
