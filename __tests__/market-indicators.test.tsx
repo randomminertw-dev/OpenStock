@@ -11,7 +11,7 @@ vi.mock('@/lib/actions/factor-preferences.actions', () => ({
     getFactorPreference: vi.fn(async (symbol: string) => {
         const { defaultFactorPreference, marketForSymbol } = await import('@/lib/indicators/factor-periods');
         const market = marketForSymbol(symbol);
-        return market ? { preference: defaultFactorPreference(market), readError: false } : null;
+        return market ? { preference: defaultFactorPreference(market), readError: false, saved: false } : null;
     }),
     saveFactorPreference: vi.fn(),
 }));
@@ -241,6 +241,7 @@ describe('rendered stock details', () => {
         expect(html).toContain('資料日期');
         expect(html).toContain('跨市場不可直接比較');
         expect(html).toContain('樣本');
+        expect(html).toContain('相對該標的自身歷史波動');
         if (symbol === '2330.TW') expect(html).toContain('未還原');
         if (symbol.startsWith('BINANCE:')) expect(html).toContain('BTCUSDT');
         // One request for each market's candles across the concurrently rendered panels.
@@ -261,7 +262,7 @@ describe('rendered stock details', () => {
         const html = renderToStaticMarkup(<FactorSettings symbol="AAPL"
             initialPreference={defaultFactorPreference('us')}
             initialResponse={{ assessment: null, reason: 'invalid-preference', candleCount: 0 }}
-            readError={false} />);
+            readError={false} initialSaved={false} />);
         expect(html).toContain('四因素設定無效');
         expect(html).not.toContain('行情服務暫時無法使用');
         expect(html).toContain('grid grid-cols-2');
@@ -272,9 +273,45 @@ describe('rendered stock details', () => {
     it('keeps international factors fixed at daily n14 without settings', async () => {
         const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
         const html = renderToStaticMarkup(<FactorSettings symbol="VOD.L" initialPreference={null}
-            initialResponse={{ assessment: null, reason: 'no-data', candleCount: 0 }} readError={false} />);
+            initialResponse={{ assessment: null, reason: 'no-data', candleCount: 0 }} readError={false} initialSaved={false} />);
         expect(html).toContain('國際市場沿用固定日 K、四因素 n=14');
         expect(html).not.toContain('儲存市場偏好');
+    });
+
+    it('marks a stored legacy n14 preference as saved on first render', async () => {
+        const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const html = renderToStaticMarkup(<FactorSettings symbol="AAPL" initialPreference={defaultFactorPreference('us')}
+            initialResponse={{ assessment: null, reason: 'no-data', candleCount: 0 }} readError={false} initialSaved />);
+        expect(html).toContain('現行預設');
+        expect(html).toContain('已儲存');
+    });
+
+    it('rejects draft edits while a factor request is busy', async () => {
+        const { editFactorDraft } = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const current = defaultFactorPreference('crypto');
+        const next = { ...current, periods: { ...current.periods, T: 30 } };
+        expect(editFactorDraft(current, next, true)).toEqual(current);
+        expect(editFactorDraft(current, next, false)).toEqual(next);
+    });
+
+    it('keeps successful persistence distinct from a failed assessment refresh', async () => {
+        const { runFactorUpdate } = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const preference = defaultFactorPreference('us');
+        const save = vi.fn().mockResolvedValue(preference);
+        const refresh = vi.fn().mockRejectedValue(new Error('refresh offline'));
+        expect(await runFactorUpdate(preference, save, refresh)).toMatchObject({ saved: true, error: 'refresh', preference });
+        expect(save).toHaveBeenCalledOnce();
+        expect(await runFactorUpdate(preference, null, refresh)).toMatchObject({ saved: false, error: 'refresh', preference });
+        expect(save).toHaveBeenCalledOnce();
+        const failedSave = vi.fn().mockRejectedValue(new Error('database offline'));
+        const unusedRefresh = vi.fn();
+        expect(await runFactorUpdate(preference, failedSave, unusedRefresh)).toMatchObject({ saved: false, error: 'save', preference });
+        expect(unusedRefresh).not.toHaveBeenCalled();
+        const retried = { assessment: null, reason: 'no-data' as const, candleCount: 0 };
+        expect(await runFactorUpdate(preference, null, vi.fn().mockResolvedValue(retried))).toMatchObject({ saved: false, error: null, response: retried });
     });
 });
 

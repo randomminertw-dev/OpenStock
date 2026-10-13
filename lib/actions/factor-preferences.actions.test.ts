@@ -34,6 +34,7 @@ describe('factor preferences session and market storage', () => {
             expect(await getFactorPreference(symbol!)).toEqual({
                 preference: { market, preset: 'legacy', periods: { T: 14, M: 14, V: 14, R: 14 }, interval },
                 readError: false,
+                saved: false,
             });
         },
     );
@@ -54,10 +55,15 @@ describe('factor preferences session and market storage', () => {
         expect(records.size).toBe(6);
         for (const user of ['alice', 'bob']) {
             mocks.requireUserId.mockResolvedValue(user);
-            expect(await getFactorPreference('MSFT')).toMatchObject({ preference: { periods: { T: user === 'alice' ? 21 : 7 } } });
-            expect(await getFactorPreference('TPEX:6488')).toMatchObject({ preference: { periods: { T: 30 } } });
-            expect(await getFactorPreference('CG:ethereum')).toMatchObject({ preference: { periods: { T: 180 }, interval: '4h' } });
+            expect(await getFactorPreference('MSFT')).toMatchObject({ saved: true, preference: { periods: { T: user === 'alice' ? 21 : 7 } } });
+            expect(await getFactorPreference('TPEX:6488')).toMatchObject({ saved: true, preference: { periods: { T: 30 } } });
+            expect(await getFactorPreference('CG:ethereum')).toMatchObject({ saved: true, preference: { periods: { T: 180 }, interval: '4h' } });
         }
+    });
+
+    it('distinguishes an explicitly stored legacy n14 preference from the untouched default', async () => {
+        mocks.findOne.mockResolvedValue(input('us', 14));
+        expect(await getFactorPreference('AAPL')).toMatchObject({ saved: true, readError: false, preference: { preset: 'legacy', periods: { T: 14 } } });
     });
 
     it('takes the account only from session and rejects forged markets', async () => {
@@ -97,13 +103,13 @@ describe('factor preferences session and market storage', () => {
     it('warns when reads or stored data are invalid', async () => {
         mocks.findOne.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(input('us', 3));
         for (let i = 0; i < 2; i++) {
-            expect(await getFactorPreference('AAPL')).toMatchObject({ readError: true, preference: { periods: { T: 14 } } });
+            expect(await getFactorPreference('AAPL')).toMatchObject({ readError: true, saved: false, preference: { periods: { T: 14 } } });
         }
     });
 
     it('warns when connection fails during read and propagates failed saves', async () => {
         mocks.connect.mockRejectedValueOnce(new Error('offline'));
-        expect(await getFactorPreference('CG:bitcoin')).toMatchObject({ readError: true, preference: { interval: '1d' } });
+        expect(await getFactorPreference('CG:bitcoin')).toMatchObject({ readError: true, saved: false, preference: { interval: '1d' } });
         mocks.update.mockRejectedValueOnce(new Error('write failed'));
         await expect(saveFactorPreference('AAPL', input())).rejects.toThrow('write failed');
     });

@@ -9,7 +9,7 @@ import {
 } from '@/lib/indicators/factor-periods';
 
 export async function getFactorPreference(symbol: string): Promise<{
-    preference: FactorPreference; readError: boolean;
+    preference: FactorPreference; readError: boolean; saved: boolean;
 } | null> {
     const market = marketForSymbol(symbol);
     if (!market) return null;
@@ -20,9 +20,10 @@ export async function getFactorPreference(symbol: string): Promise<{
         return {
             preference: stored ? parseFactorPreference(market, stored) : defaultFactorPreference(market),
             readError: false,
+            saved: Boolean(stored),
         };
     } catch {
-        return { preference: defaultFactorPreference(market), readError: true };
+        return { preference: defaultFactorPreference(market), readError: true, saved: false };
     }
 }
 

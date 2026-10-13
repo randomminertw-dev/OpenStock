@@ -195,7 +195,7 @@ export default async function IndicatorDashboard({ symbol }: { symbol: string })
         try {
             preferenceResult = await getFactorPreference(symbol);
         } catch {
-            preferenceResult = { preference: defaultFactorPreference(market), readError: true };
+            preferenceResult = { preference: defaultFactorPreference(market), readError: true, saved: false };
         }
     }
     const [{ assessment, reason, candleCount }, factorResponse, periodAssessment] = await Promise.all([
@@ -235,8 +235,9 @@ export default async function IndicatorDashboard({ symbol }: { symbol: string })
                     <IndicatorTable results={results} />
                 </>
             )}
-            <FactorSettings symbol={symbol} initialPreference={preferenceResult?.preference ?? null}
-                initialResponse={factorResponse} readError={preferenceResult?.readError ?? false} />
+            <FactorSettings key={symbol} symbol={symbol} initialPreference={preferenceResult?.preference ?? null}
+                initialResponse={factorResponse} readError={preferenceResult?.readError ?? false}
+                initialSaved={preferenceResult?.saved ?? false} />
             {(ids || periodAssessment) && <MultiLevelIds ids={ids ?? null} idsPeriod={periodAssessment?.idsPeriod ?? null} />}
             {periodAssessment && (
                 <>

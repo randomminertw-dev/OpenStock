@@ -84,7 +84,7 @@ export default function FactorCards({ factors, assessment }: { factors: FourFact
             </div>
 
             <p className="mt-2 text-[11.5px] leading-relaxed text-faint">
-                標準化技術分數，非預測機率。T / M / V 正值偏多、負值偏空；R 為波動風險強度（0–100），不代表方向。
+                標準化技術分數，非預測機率。T / M / V 正值偏多、負值偏空；R 是相對該標的自身歷史波動的分位（0–100），不代表方向。
             </p>
             {assessment && (
                 <p className="num mt-1 text-[11px] leading-relaxed text-faint">
