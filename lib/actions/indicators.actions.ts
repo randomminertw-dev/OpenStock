@@ -10,7 +10,7 @@ import { computeVariants } from '../indicators/variants';
 import { computeIDS, computeIDSFactor, computeIDSPeriod } from '../indicators/ids';
 import type { Candle, IDSResult, IndicatorResult } from '../indicators/types';
 import type { FourFactors } from '../indicators/factors';
-import type { CryptoInterval } from '../indicators/factor-periods';
+import type { CryptoInterval, FactorPreference } from '../indicators/factor-periods';
 import type {
   VariantIndicatorId,
   VariantResult,
@@ -167,11 +167,16 @@ export async function getFourFactorAssessmentWithReason(
   symbol: string,
   input: unknown,
 ): Promise<{ assessment: FourFactorAssessment | null; reason: AssessmentFailureReason | null; candleCount: number }> {
+  if (typeof symbol !== 'string') return { assessment: null, reason: 'unsupported-symbol', candleCount: 0 };
+  const symbolMarket = candleMarket(symbol);
+  if (symbolMarket.kind === 'unsupported') return { assessment: null, reason: 'unsupported-symbol', candleCount: 0 };
+  // International symbols retain the pre-preference daily n=14 behavior.
   const market = marketForSymbol(symbol);
-  if (!market) return { assessment: null, reason: 'unsupported-symbol', candleCount: 0 };
-  let preference;
+  let preference: FactorPreference;
   try {
-    preference = parseFactorPreference(market, input);
+    preference = symbolMarket.kind === 'international'
+      ? defaultFactorPreference('us')
+      : parseFactorPreference(market!, input);
   } catch {
     return { assessment: null, reason: 'invalid-preference', candleCount: 0 };
   }
@@ -234,10 +239,12 @@ export async function getPeriodAssessment(
 
 /** Legacy n=14 combined response for existing callers. */
 export async function getFactorAssessment(symbol: string): Promise<FactorAssessment | null> {
+  if (typeof symbol !== 'string') return null;
+  const symbolMarket = candleMarket(symbol);
+  if (symbolMarket.kind === 'unsupported') return null;
   const market = marketForSymbol(symbol);
-  if (!market) return null;
   const [factor, period] = await Promise.all([
-    getFourFactorAssessmentWithReason(symbol, defaultFactorPreference(market)),
+    getFourFactorAssessmentWithReason(symbol, defaultFactorPreference(market ?? 'us')),
     getPeriodAssessment(symbol),
   ]);
   if (!factor.assessment || !period) return null;

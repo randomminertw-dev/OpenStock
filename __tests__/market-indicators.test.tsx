@@ -175,6 +175,39 @@ describe('indicator assessments across markets', () => {
         expect(result).toMatchObject({ assessment: null, reason: 'invalid-preference', candleCount: 0 });
         expect(fetcher).not.toHaveBeenCalled();
     });
+
+    it('keeps international symbols on fixed daily n14 factors and the legacy wrapper', async () => {
+        const finnHub = vi.mocked((await import('@/lib/actions/finnhub.actions')).getCandlesWithReason);
+        const values = rows(270);
+        finnHub.mockResolvedValue({
+            candles: { s: 'ok', t: values.map(r => r.t / 1000), o: values.map(r => r.o), h: values.map(r => r.h),
+                l: values.map(r => r.l), c: values.map(r => r.c), v: values.map(r => r.v), volumeComplete: true },
+            reason: null, source: { provider: 'finnhub', symbol: 'VOD.L', timeZone: 'UTC' },
+        });
+        const { getFourFactorAssessmentWithReason, getFactorAssessment, getPeriodAssessment } = await import('@/lib/actions/indicators.actions');
+        const [factor, legacy, period] = await Promise.all([
+            getFourFactorAssessmentWithReason('VOD.L', { market: 'us', preset: 'short', periods: { T: 7, M: 7, V: 7, R: 7 }, interval: null }),
+            getFactorAssessment('VOD.L'), getPeriodAssessment('VOD.L'),
+        ]);
+        expect(factor).toMatchObject({ reason: null, candleCount: 270, assessment: { interval: '1d', source: { provider: 'finnhub' } } });
+        expect(factor.assessment?.factors.T.n).toBe(14);
+        expect(factor.assessment?.factors.M.score).not.toBeNull();
+        expect(legacy?.factors.M.n).toBe(14);
+        expect(legacy?.variants).toEqual(period?.variants);
+    });
+
+    it.each([42, {}, ['AAPL']])('returns failure for a non-string symbol %j without loading candles', async (symbol) => {
+        const fetcher = marketFetch();
+        vi.stubGlobal('fetch', fetcher);
+        const finnHub = vi.mocked((await import('@/lib/actions/finnhub.actions')).getCandlesWithReason);
+        finnHub.mockClear();
+        const { getFourFactorAssessmentWithReason, getFactorAssessment } = await import('@/lib/actions/indicators.actions');
+        const preference = { market: 'us', preset: 'legacy', periods: { T: 14, M: 14, V: 14, R: 14 }, interval: null };
+        expect(await getFourFactorAssessmentWithReason(symbol as string, preference)).toMatchObject({ assessment: null, reason: 'unsupported-symbol', candleCount: 0 });
+        expect(await getFactorAssessment(symbol as string)).toBeNull();
+        expect(fetcher).not.toHaveBeenCalled();
+        expect(finnHub).not.toHaveBeenCalled();
+    });
 });
 
 describe('rendered stock details', () => {
