@@ -6,9 +6,17 @@ import { createInMemoryTaiwanRepository } from '@/lib/taiwan/repository';
 import { setTaiwanRepositoryForTesting } from '@/lib/taiwan/reads';
 
 // Mock DB and external calls
+const { mockGetSession, mockRequireUserId, mockIsStockInWatchlist, mockRouterRefresh } =
+    vi.hoisted(() => ({
+        mockGetSession: vi.fn().mockResolvedValue({ user: { id: 'test-user-id' } }),
+        mockRequireUserId: vi.fn().mockResolvedValue('test-user-id'),
+        mockIsStockInWatchlist: vi.fn().mockResolvedValue(false),
+        mockRouterRefresh: vi.fn(),
+    }));
+
 vi.mock('@/lib/better-auth/auth', () => ({
-    getSession: vi.fn().mockResolvedValue({ user: { id: 'test-user-id' } }),
-    requireUserId: vi.fn().mockResolvedValue('test-user-id'),
+    getSession: mockGetSession,
+    requireUserId: mockRequireUserId,
 }));
 
 vi.mock('@/database/mongoose', () => ({
@@ -16,7 +24,7 @@ vi.mock('@/database/mongoose', () => ({
 }));
 
 vi.mock('@/lib/actions/watchlist.actions', () => ({
-    isStockInWatchlist: vi.fn().mockResolvedValue(false),
+    isStockInWatchlist: mockIsStockInWatchlist,
     addToWatchlist: vi.fn().mockResolvedValue(true),
     removeFromWatchlist: vi.fn().mockResolvedValue(true),
 }));
@@ -34,7 +42,7 @@ vi.mock('@/components/TradingViewWidget', () => ({
 }));
 
 vi.mock('next/navigation', () => ({
-    useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+    useRouter: () => ({ refresh: mockRouterRefresh, push: vi.fn() }),
 }));
 
 vi.mock('@/components/stocks/IndicatorDashboard', () => ({
@@ -57,7 +65,7 @@ async function resolveServerTree(node: React.ReactNode): Promise<React.ReactNode
 import TaiwanHeader from '@/components/stocks/TaiwanHeader';
 import TaiwanChart from '@/components/stocks/TaiwanChart';
 import TaiwanDetails from '@/components/stocks/TaiwanDetails';
-import TaiwanHistoryStatus from '@/components/stocks/TaiwanHistoryStatus';
+import TaiwanHistoryStatus, { shouldRefreshOnHistoryTransition } from '@/components/stocks/TaiwanHistoryStatus';
 import StockDetails from '@/app/(root)/stocks/[symbol]/page';
 
 describe('Taiwan native components and stock page', () => {
@@ -66,6 +74,13 @@ describe('Taiwan native components and stock page', () => {
     beforeEach(() => {
         repo = createInMemoryTaiwanRepository();
         setTaiwanRepositoryForTesting(repo);
+        mockRouterRefresh.mockClear();
+        mockGetSession.mockReset();
+        mockGetSession.mockResolvedValue({ user: { id: 'test-user-id' } });
+        mockRequireUserId.mockReset();
+        mockRequireUserId.mockResolvedValue('test-user-id');
+        mockIsStockInWatchlist.mockReset();
+        mockIsStockInWatchlist.mockResolvedValue(false);
     });
 
     describe('TaiwanHeader', () => {
@@ -105,6 +120,50 @@ describe('Taiwan native components and stock page', () => {
             expect(html).toContain('2026-10-13');
             expect(html).toContain('Alerts: US stocks and crypto');
             expect(html).toContain('1,045');
+            expect(html).toContain('Watch');
+            expect(html).not.toContain('is-on');
+        });
+
+        it('displays filled/active state when isInWatchlist is true', async () => {
+            const sec: TaiwanSecurity = {
+                exchange: 'TWSE',
+                code: '2330',
+                symbol: 'TWSE:2330',
+                name: '台積電',
+                kind: 'stock',
+                currency: 'TWD',
+                listingDate: '1994-09-05',
+                status: 'active',
+                metadata: {},
+                source: 'twse',
+                asof: '2026-10-13',
+            };
+            const quote: TaiwanQuote = {
+                exchange: 'TWSE',
+                code: '2330',
+                price: 1045,
+                change: 15,
+                changePercent: 1.46,
+                currency: 'TWD',
+                tradingDate: '2026-10-13',
+                source: 'twse',
+                mode: 'close',
+                stale: false,
+            };
+
+            const html = renderToStaticMarkup(
+                await TaiwanHeader({
+                    security: sec,
+                    quote,
+                    symbol: 'TWSE:2330',
+                    isInWatchlist: true,
+                })
+            );
+
+            expect(html).toContain('Watching');
+            expect(html).toContain('is-on');
+            expect(html).toContain('fill="currentColor"');
+            expect(html).toContain('aria-pressed="true"');
         });
 
         it('does not display USD or $ when currency is null or unknown', async () => {
@@ -316,6 +375,32 @@ describe('Taiwan native components and stock page', () => {
             expect(html).toContain('24');
             expect(html).toContain('重試');
         });
+
+        it('returns null when state is ready', () => {
+            const status: TaiwanHistoryStatusData = {
+                state: 'ready',
+                completed: 24,
+                total: 24,
+                candleCount: 800,
+                reason: null,
+            };
+
+            const html = renderToStaticMarkup(
+                <TaiwanHistoryStatus symbol="TWSE:2330" initial={status} />
+            );
+
+            expect(html).toBe('');
+        });
+
+        it('identifies status transition from running or queued to ready to trigger router.refresh', () => {
+            expect(shouldRefreshOnHistoryTransition('running', 'ready')).toBe(true);
+            expect(shouldRefreshOnHistoryTransition('queued', 'ready')).toBe(true);
+            expect(shouldRefreshOnHistoryTransition('disabled', 'ready')).toBe(false);
+            expect(shouldRefreshOnHistoryTransition('partial', 'ready')).toBe(false);
+            expect(shouldRefreshOnHistoryTransition('ready', 'ready')).toBe(false);
+            expect(shouldRefreshOnHistoryTransition('running', 'running')).toBe(false);
+            expect(shouldRefreshOnHistoryTransition('queued', 'running')).toBe(false);
+        });
     });
 
     describe('Page integration for Taiwan symbols', () => {
@@ -381,6 +466,36 @@ describe('Taiwan native components and stock page', () => {
             expect(html).not.toContain('financials.js');
             expect(html).not.toContain('symbol-profile.js');
         });
+
+        it('passes isInWatchlist to TaiwanHeader to render active watchlist button', async () => {
+            const sec: TaiwanSecurity = {
+                exchange: 'TWSE',
+                code: '0050',
+                symbol: 'TWSE:0050',
+                name: '元大台灣50',
+                kind: 'etf',
+                currency: 'TWD',
+                listingDate: '2003-06-30',
+                status: 'active',
+                metadata: {
+                    indexName: '臺灣50指數',
+                    issuer: '元大證券投資信託',
+                    fundType: '國內指數股票型',
+                },
+                source: 'twse',
+                asof: '2026-10-13',
+            };
+            await repo.writeCatalog([sec]);
+
+            mockIsStockInWatchlist.mockResolvedValueOnce(true);
+
+            const jsx = await StockDetails({ params: Promise.resolve({ symbol: '0050' }) });
+            const html = renderToStaticMarkup(await resolveServerTree(jsx));
+
+            expect(html).toContain('元大台灣50');
+            expect(html).toContain('Watching');
+            expect(html).toContain('is-on');
+        });
     });
 
     describe('Server Actions & Security guarantees', () => {
@@ -409,6 +524,113 @@ describe('Taiwan native components and stock page', () => {
             expect(pageData.history).toBeDefined();
             expect(Array.isArray(pageData.history.bars)).toBe(true);
             expect(pageData.details).toBeDefined();
+            expect(pageData.isInWatchlist).toBe(false);
+        });
+
+        it('getTaiwanPageData returns isInWatchlist true when security is in user watchlist', async () => {
+            const { getTaiwanPageData } = await import('@/lib/actions/taiwan.actions');
+
+            const sec: TaiwanSecurity = {
+                exchange: 'TWSE',
+                code: '2330',
+                symbol: 'TWSE:2330',
+                name: '台積電',
+                kind: 'stock',
+                currency: 'TWD',
+                listingDate: '1994-09-05',
+                status: 'active',
+                metadata: {},
+                source: 'twse',
+                asof: '2026-10-13',
+            };
+            await repo.writeCatalog([sec]);
+
+            mockIsStockInWatchlist.mockResolvedValueOnce(true);
+            const pageData = await getTaiwanPageData('TWSE:2330');
+            expect(pageData.isInWatchlist).toBe(true);
+        });
+
+        it('getTaiwanPageData triggers requestTaiwanHistory once for signed-in user when history not yet completed', async () => {
+            const { getTaiwanPageData } = await import('@/lib/actions/taiwan.actions');
+
+            const sec: TaiwanSecurity = {
+                exchange: 'TWSE',
+                code: '2330',
+                symbol: 'TWSE:2330',
+                name: '台積電',
+                kind: 'stock',
+                currency: 'TWD',
+                listingDate: '1994-09-05',
+                status: 'active',
+                metadata: {},
+                source: 'twse',
+                asof: '2026-10-13',
+            };
+            await repo.writeCatalog([sec]);
+
+            const originalEnv = { ...process.env };
+            try {
+                process.env.TAIWAN_HISTORY_ENABLED = 'true';
+                process.env.TAIWAN_AUTO_SYNC_ENABLED = 'true';
+                process.env.TAIWAN_MAX_REQUESTS_PER_DAY = '100';
+                process.env.TAIWAN_MAX_JOBS_PER_DAY = '10';
+                process.env.TAIWAN_MAX_TRANSFER_BYTES_PER_DAY = '50000000';
+                process.env.TAIWAN_MAX_STORAGE_BYTES = '100000000';
+                process.env.TAIWAN_MAX_TRACKED_SECURITIES = '50';
+                process.env.TAIWAN_MAX_RESPONSE_BYTES = '10000000';
+
+                // Initial status in repo is disabled/unset
+                const pageData1 = await getTaiwanPageData('TWSE:2330');
+                expect(pageData1.history.status.state).toBe('queued');
+
+                // Repo status should now be updated to queued
+                const repoStatus = await repo.readHistoryStatus({ exchange: 'TWSE', code: '2330' });
+                expect(repoStatus.state).toBe('queued');
+
+                // Second call must NOT re-trigger because state is already queued
+                const pageData2 = await getTaiwanPageData('TWSE:2330');
+                expect(pageData2.history.status.state).toBe('queued');
+            } finally {
+                process.env = originalEnv;
+            }
+        });
+
+        it('getTaiwanPageData does not trigger history sync for unauthenticated visitors', async () => {
+            const { getTaiwanPageData } = await import('@/lib/actions/taiwan.actions');
+
+            const sec: TaiwanSecurity = {
+                exchange: 'TWSE',
+                code: '2330',
+                symbol: 'TWSE:2330',
+                name: '台積電',
+                kind: 'stock',
+                currency: 'TWD',
+                listingDate: '1994-09-05',
+                status: 'active',
+                metadata: {},
+                source: 'twse',
+                asof: '2026-10-13',
+            };
+            await repo.writeCatalog([sec]);
+
+            mockGetSession.mockResolvedValueOnce(null);
+
+            const originalEnv = { ...process.env };
+            try {
+                process.env.TAIWAN_HISTORY_ENABLED = 'true';
+                process.env.TAIWAN_MAX_REQUESTS_PER_DAY = '100';
+                process.env.TAIWAN_MAX_JOBS_PER_DAY = '10';
+                process.env.TAIWAN_MAX_TRANSFER_BYTES_PER_DAY = '50000000';
+                process.env.TAIWAN_MAX_STORAGE_BYTES = '100000000';
+                process.env.TAIWAN_MAX_TRACKED_SECURITIES = '50';
+                process.env.TAIWAN_MAX_RESPONSE_BYTES = '10000000';
+
+                const pageData = await getTaiwanPageData('TWSE:2330');
+                expect(pageData.history.status.state).toBe('disabled');
+                expect(pageData.isInWatchlist).toBe(false);
+            } finally {
+                process.env = originalEnv;
+            }
         });
 
         it('requestTaiwanHistoryAction enforces authentication and returns clean status DTO without raw URLs or jobKeys', async () => {
@@ -440,7 +662,7 @@ describe('Taiwan native components and stock page', () => {
             expect(status).not.toHaveProperty('upstreamUrl');
         });
 
-        it('StockHeader routes Taiwan symbols to TaiwanHeader', async () => {
+        it('StockHeader routes Taiwan symbols to TaiwanHeader and reflects watchlist status', async () => {
             const { default: StockHeader } = await import('@/components/stocks/StockHeader');
 
             const sec: TaiwanSecurity = {
@@ -458,12 +680,15 @@ describe('Taiwan native components and stock page', () => {
             };
             await repo.writeCatalog([sec]);
 
+            mockIsStockInWatchlist.mockResolvedValueOnce(true);
             const jsx = await StockHeader({ symbol: '6488' });
             const html = renderToStaticMarkup(jsx);
 
             expect(html).toContain('環球晶');
             expect(html).toContain('TPEX');
             expect(html).toContain('Alerts: US stocks and crypto');
+            expect(html).toContain('Watching');
+            expect(html).toContain('is-on');
         });
     });
 });

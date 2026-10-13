@@ -49,14 +49,19 @@ export default async function StockDetails({ params }: StockDetailsPageProps) {
 
     // Taiwan stocks & ETFs: official closing quote, native chart, details, and sync status
     if (candleMarket(symbol).kind === 'taiwan') {
-        const { security, quote, history, details } = await getTaiwanPageData(symbol);
+        const { security, quote, history, details, isInWatchlist } = await getTaiwanPageData(symbol);
         const tvSymbol = security
             ? `${security.exchange}:${security.code}`
             : formatSymbolForTradingView(symbol);
 
         return (
             <>
-                <TaiwanHeader security={security} quote={quote} symbol={symbol} />
+                <TaiwanHeader
+                    security={security}
+                    quote={quote}
+                    symbol={symbol}
+                    isInWatchlist={isInWatchlist}
+                />
                 <TaiwanHistoryStatus symbol={symbol} initial={history.status} />
 
                 <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">

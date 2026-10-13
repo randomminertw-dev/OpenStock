@@ -6,6 +6,7 @@ import {
     searchTaiwanSecurities as readSearch,
     getTaiwanHistory as readHistory,
     getTaiwanDetails as readDetails,
+    getTaiwanRepository,
 } from '@/lib/taiwan/reads';
 import { parseTaiwanKey } from '@/lib/taiwan/symbols';
 import { requestTaiwanHistory } from '@/lib/taiwan/history';
@@ -42,14 +43,58 @@ export async function getTaiwanPageData(symbol: string): Promise<{
     quote: TaiwanQuote | null;
     history: TaiwanHistory;
     details: TaiwanDetails | null;
+    isInWatchlist: boolean;
 }> {
+    const repo = getTaiwanRepository();
+    let session = null;
+    try {
+        const { getSession } = await import('@/lib/better-auth/auth');
+        session = await getSession();
+    } catch {
+        session = null;
+    }
+
+    let isInWatchlist = false;
+    if (session?.user) {
+        try {
+            const { isStockInWatchlist } = await import('@/lib/actions/watchlist.actions');
+            isInWatchlist = await isStockInWatchlist(symbol);
+        } catch {
+            isInWatchlist = false;
+        }
+    }
+
     const [security, quote, history, details] = await Promise.all([
-        readSecurity(symbol),
-        readQuote(symbol),
-        readHistory(symbol, 800),
-        readDetails(symbol),
+        readSecurity(symbol, repo),
+        readQuote(symbol, repo),
+        readHistory(symbol, 800, repo),
+        readDetails(symbol, repo),
     ]);
-    return { security, quote, history, details };
+
+    if (session?.user) {
+        const currentStatus = history.status;
+        if (
+            currentStatus.state !== 'ready' &&
+            currentStatus.state !== 'running' &&
+            currentStatus.state !== 'queued'
+        ) {
+            const key =
+                parseTaiwanKey(symbol) ??
+                (security ? { exchange: security.exchange, code: security.code } : null);
+            if (key && process.env.TAIWAN_HISTORY_ENABLED === 'true') {
+                try {
+                    const nextStatus = await requestTaiwanHistory(key, 800, repo);
+                    if (nextStatus.state === 'queued' || nextStatus.state === 'running') {
+                        history.status = nextStatus;
+                    }
+                } catch (err) {
+                    console.error('Failed to trigger background Taiwan history sync:', err);
+                }
+            }
+        }
+    }
+
+    return { security, quote, history, details, isInWatchlist };
 }
 
 /**
@@ -61,7 +106,8 @@ export async function requestTaiwanHistoryAction(
 ): Promise<TaiwanHistoryStatus> {
     const { requireUserId } = await import('@/lib/better-auth/auth');
     await requireUserId();
-    const sec = await readSecurity(symbol);
+    const repo = getTaiwanRepository();
+    const sec = await readSecurity(symbol, repo);
     const key = parseTaiwanKey(symbol) ?? (sec ? { exchange: sec.exchange, code: sec.code } : null);
     if (!key) {
         return {
@@ -72,7 +118,7 @@ export async function requestTaiwanHistoryAction(
             reason: null,
         };
     }
-    return await requestTaiwanHistory(key, days);
+    return await requestTaiwanHistory(key, days, repo);
 }
 
 /**

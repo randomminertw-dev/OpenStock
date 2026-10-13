@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AlertCircle, Clock, Database, RefreshCw } from 'lucide-react';
 import type { TaiwanHistoryStatus as TaiwanHistoryStatusData } from '@/lib/taiwan/types';
 import { getTaiwanHistory, requestTaiwanHistoryAction } from '@/lib/actions/taiwan.actions';
@@ -10,13 +11,36 @@ interface TaiwanHistoryStatusProps {
     initial: TaiwanHistoryStatusData;
 }
 
+export function shouldRefreshOnHistoryTransition(
+    prevState: TaiwanHistoryStatusData['state'],
+    nextState: TaiwanHistoryStatusData['state']
+): boolean {
+    const wasActive = prevState === 'running' || prevState === 'queued';
+    return wasActive && nextState === 'ready';
+}
+
 export default function TaiwanHistoryStatus({
     symbol,
     initial,
 }: TaiwanHistoryStatusProps) {
+    let router: ReturnType<typeof useRouter> | null = null;
+    try {
+        // eslint-disable-next-line react-hooks/rules-of-hooks
+        router = useRouter();
+    } catch {
+        router = null;
+    }
     const [status, setStatus] = useState<TaiwanHistoryStatusData>(initial);
     const [isRetrying, setIsRetrying] = useState(false);
     const pollCountRef = useRef(0);
+    const prevStatusStateRef = useRef(initial.state);
+
+    useEffect(() => {
+        if (shouldRefreshOnHistoryTransition(prevStatusStateRef.current, status.state)) {
+            router?.refresh();
+        }
+        prevStatusStateRef.current = status.state;
+    }, [status.state, router]);
 
     const handleRetry = async () => {
         setIsRetrying(true);

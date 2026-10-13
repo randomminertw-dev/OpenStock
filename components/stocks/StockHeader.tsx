@@ -86,11 +86,19 @@ async function CoinGeckoHeader({ symbol }: { symbol: string }) {
 
 export default async function StockHeader({ symbol }: { symbol: string }) {
     if (candleMarket(symbol).kind === 'taiwan') {
-        const [security, quote] = await Promise.all([
+        const [security, quote, isInWatchlist] = await Promise.all([
             getTaiwanSecurity(symbol),
             getTaiwanQuote(symbol),
+            isStockInWatchlist(symbol).catch(() => false),
         ]);
-        return <TaiwanHeader security={security} quote={quote} symbol={symbol} />;
+        return (
+            <TaiwanHeader
+                security={security}
+                quote={quote}
+                symbol={symbol}
+                isInWatchlist={isInWatchlist}
+            />
+        );
     }
     if (isCoinGeckoSymbol(symbol)) return <CoinGeckoHeader symbol={symbol} />;
     if (!hasFinnhubQuotes(symbol)) return <TradingViewHeader symbol={symbol} />;
