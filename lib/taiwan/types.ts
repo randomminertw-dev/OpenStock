@@ -74,6 +74,7 @@ export type TaiwanDetails = {
 export type TaiwanRequester = (url: string, init?: RequestInit) => Promise<unknown>;
 
 export type { TaiwanCatalogInput, TaiwanDatasetBundle, TaiwanDatasetId } from './datasets';
+import type { TaiwanDatasetId } from './datasets';
 
 export class TaiwanSourceError extends Error {
     constructor(
@@ -84,4 +85,50 @@ export class TaiwanSourceError extends Error {
         super(message || reason);
         this.name = 'TaiwanSourceError';
     }
+}
+
+export type TaiwanUsageAmounts = {
+    requests: number;
+    jobs: number;
+    transferBytes: number;
+    storageBytes: number;
+};
+
+export type TaiwanUsageLimits = {
+    requests: number;
+    jobs: number;
+    transferBytes: number;
+    storageBytes: number;
+};
+
+export type TaiwanSyncConfig = {
+    autoSyncEnabled: boolean;
+    historyEnabled: boolean;
+    maxRequestsPerDay: number;
+    maxJobsPerDay: number;
+    maxTransferBytesPerDay: number;
+    maxStorageBytes: number;
+    maxTrackedSecurities: number;
+    maxResponseBytes: number;
+    upstreamConcurrency?: number;
+    minIntervalMs?: number;
+    timeoutMs?: number;
+    maxRetries?: number;
+};
+
+export interface TaiwanRepository {
+    readCatalog(): Promise<TaiwanSecurity[]>;
+    readBars(key: TaiwanKey, from?: string, through?: string): Promise<TaiwanBar[]>;
+    readDetails(key: TaiwanKey): Promise<TaiwanDetails | null>;
+    writeCatalog(items: TaiwanSecurity[]): Promise<void>;
+    writeBars(bars: TaiwanBar[]): Promise<void>;
+    writeDetails(details: TaiwanDetails): Promise<void>;
+    claimJob(jobKey: string, owner: string, ttlMs: number): Promise<boolean>;
+    releaseJob(jobKey: string, owner: string): Promise<void>;
+    readHistoryStatus(key: TaiwanKey): Promise<TaiwanHistoryStatus>;
+    writeHistoryStatus(key: TaiwanKey, status: TaiwanHistoryStatus): Promise<void>;
+    readDatasetCheckpoint(id: TaiwanDatasetId): Promise<string | null>;
+    writeDatasetCheckpoint(id: TaiwanDatasetId, asof: string): Promise<void>;
+    reserveUsage(day: string, amounts: TaiwanUsageAmounts, limits: TaiwanUsageLimits): Promise<boolean>;
+    settleUsage(day: string, amounts: TaiwanUsageAmounts): Promise<void>;
 }
