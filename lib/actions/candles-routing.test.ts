@@ -26,6 +26,152 @@ beforeEach(() => {
     vi.stubEnv('ALPACA_API_SECRET', 'test-secret');
     vi.stubEnv('FINMIND_API_TOKEN', '');
 });
+
+describe('recent closed crypto factor candles', () => {
+    const intervals = [['4h', 4, '4Hour'], ['8h', 8, '8Hour'], ['12h', 12, '12Hour']] as const;
+    const now = Date.parse('2026-10-13T00:00:00Z');
+    const binanceBar = (start: number, duration: number, volume: unknown = '12') =>
+        [start, '100', '108', '99', '105', volume, start + duration - 1];
+    const alpacaBar = (start: number, volume: unknown = 12) =>
+        ({ t: new Date(start).toISOString(), o: 100, h: 108, l: 99, c: 105, v: volume });
+
+    it.each(intervals)('loads recent closed Binance %s bars at the UTC boundary', async (interval, hours) => {
+        vi.setSystemTime(now);
+        const duration = hours * 3600_000;
+        const fetcher = vi.fn().mockResolvedValue(response([
+            binanceBar(now - duration, duration), binanceBar(now, duration),
+            binanceBar(now - 2 * duration, duration),
+        ]));
+        vi.stubGlobal('fetch', fetcher);
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        const result = await getFactorCandlesWithReason('BINANCE:BTCUSDT', interval);
+        expect(result).toMatchObject({ reason: null, source: { provider: 'binance', timeZone: 'UTC' },
+            candles: { t: [(now - 2 * duration) / 1000, (now - duration) / 1000], c: [105, 105] } });
+        const url = new URL(fetcher.mock.calls[0][0]);
+        expect(url.searchParams.get('interval')).toBe(interval);
+        expect(url.searchParams.get('symbol')).toBe('BTCUSDT');
+        expect(Number(url.searchParams.get('startTime'))).toBe(now - 550 * duration);
+        expect(Number(url.searchParams.get('endTime'))).toBe(now);
+        expect(Number(url.searchParams.get('limit'))).toBeGreaterThanOrEqual(550);
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it.each(intervals)('loads recent closed CG %s bars through Alpaca', async (interval, hours, timeframe) => {
+        vi.setSystemTime(now);
+        const duration = hours * 3600_000;
+        const fetcher = vi.fn(async (url: string) => url.includes('api.coingecko.com')
+            ? response({ symbol: 'btc' })
+            : response({ bars: { 'BTC/USD': [alpacaBar(now - 2 * duration), alpacaBar(now - duration), alpacaBar(now)] } }));
+        vi.stubGlobal('fetch', fetcher);
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        const result = await getFactorCandlesWithReason('CG:bitcoin', interval);
+        expect(result).toMatchObject({ reason: null, source: { provider: 'alpaca', symbol: 'BTC/USD', timeZone: 'UTC' },
+            candles: { t: [(now - 2 * duration) / 1000, (now - duration) / 1000] } });
+        const url = new URL(fetcher.mock.calls[1][0]);
+        expect(url.pathname).toBe('/v1beta3/crypto/us/bars');
+        expect(url.searchParams.get('timeframe')).toBe(timeframe);
+        expect(Date.parse(url.searchParams.get('start')!)).toBe(now - 550 * duration);
+        expect(Date.parse(url.searchParams.get('end')!)).toBe(now);
+        expect(Number(url.searchParams.get('limit'))).toBeGreaterThanOrEqual(550);
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it.each(['BINANCE:BTCUSDT', 'CG:bitcoin'])('excludes %s bars just before their UTC close', async (symbol) => {
+        vi.setSystemTime(now - 1);
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.includes('api.coingecko.com')
+            ? response({ symbol: 'btc' }) : url.includes('binance')
+                ? response([binanceBar(now - 8 * 3600_000, 4 * 3600_000), binanceBar(now - 4 * 3600_000, 4 * 3600_000)])
+                : response({ bars: { 'BTC/USD': [alpacaBar(now - 8 * 3600_000), alpacaBar(now - 4 * 3600_000)] } })));
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        expect(await getFactorCandlesWithReason(symbol, '4h')).toMatchObject({
+            candles: { t: [(now - 8 * 3600_000) / 1000] }, reason: null,
+        });
+    });
+
+    it.each(['BINANCE:BTCUSDT', 'CG:bitcoin'])('preserves %s no-data when there are no complete bars', async (symbol) => {
+        vi.setSystemTime(now);
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.includes('api.coingecko.com')
+            ? response({ symbol: 'btc' }) : url.includes('binance')
+                ? response([binanceBar(now, 4 * 3600_000)])
+                : response({ bars: { 'BTC/USD': [alpacaBar(now)] } })));
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        expect(await getFactorCandlesWithReason(symbol, '4h')).toMatchObject({ candles: null, reason: 'no-data' });
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it('preserves missing Alpaca config for CG hourly bars', async () => {
+        vi.stubEnv('ALPACA_API_KEY', '');
+        const fetcher = vi.fn().mockResolvedValue(response({ symbol: 'btc' }));
+        vi.stubGlobal('fetch', fetcher);
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        expect(await getFactorCandlesWithReason('CG:bitcoin', '12h')).toMatchObject({
+            candles: null, reason: 'missing-config', source: { provider: 'alpaca', timeZone: 'UTC' },
+        });
+        expect(fetcher).toHaveBeenCalledTimes(1);
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it.each(['BINANCE:BTCUSDT', 'CG:bitcoin'])('isolates %s interval caches and deduplicates concurrent requests', async (symbol) => {
+        vi.setSystemTime(now);
+        const fetcher = vi.fn(async (url: string) => url.includes('api.coingecko.com')
+            ? response({ symbol: 'btc' }) : url.includes('binance')
+                ? response([binanceBar(now - 86400_000, 4 * 3600_000)])
+                : response({ bars: { 'BTC/USD': [alpacaBar(now - 86400_000)] } }));
+        vi.stubGlobal('fetch', fetcher);
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        for (const [interval] of intervals) {
+            const results = await Promise.all([getFactorCandlesWithReason(symbol, interval), getFactorCandlesWithReason(symbol, interval)]);
+            expect(results[0].candles).not.toBeNull();
+            expect(results[0]).toEqual(results[1]);
+            await getFactorCandlesWithReason(symbol, interval);
+        }
+        const requests = fetcher.mock.calls.filter(([url]) => !url.includes('api.coingecko.com'));
+        expect(requests).toHaveLength(3);
+        expect(requests.map(([url]) => new URL(url).searchParams.get(symbol.startsWith('CG:') ? 'timeframe' : 'interval')))
+            .toEqual(symbol.startsWith('CG:') ? ['4Hour', '8Hour', '12Hour'] : ['4h', '8h', '12h']);
+    });
+
+    it.each(['BINANCE:BTCUSDT', 'CG:bitcoin'])('returns short %s history with missing volume without daily fallback', async (symbol) => {
+        const fetcher = vi.fn(async (url: string) => url.includes('api.coingecko.com')
+            ? response({ symbol: 'btc' }) : url.includes('binance')
+                ? response([binanceBar(now - 86400_000, 4 * 3600_000, null)])
+                : response({ bars: { 'BTC/USD': [alpacaBar(now - 86400_000, null)] } }));
+        vi.stubGlobal('fetch', fetcher);
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        expect(await getFactorCandlesWithReason(symbol, '4h')).toMatchObject({
+            reason: null, candles: { c: [105], volumeComplete: false },
+        });
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it.each(['BINANCE:BTCUSDT', 'CG:bitcoin'])('preserves %s API errors without fallback', async (symbol) => {
+        const fetcher = vi.fn(async (url: string) => url.includes('api.coingecko.com')
+            ? response({ symbol: 'btc' }) : response({}, 429));
+        vi.stubGlobal('fetch', fetcher);
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        expect(await getFactorCandlesWithReason(symbol, '8h')).toMatchObject({ candles: null, reason: 'api-error' });
+        expect(fetcher).toHaveBeenCalledTimes(symbol.startsWith('CG:') ? 2 : 1);
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-crypto hourly symbols without contacting any provider', async () => {
+        const fetcher = vi.fn();
+        vi.stubGlobal('fetch', fetcher);
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        expect(await getFactorCandlesWithReason('AAPL', '4h')).toMatchObject({ candles: null, reason: 'unsupported-symbol' });
+        expect(fetcher).not.toHaveBeenCalled();
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it('reuses daily cache and the existing 400-day request for 1d', async () => {
+        const fetcher = vi.fn().mockResolvedValue(response([BAR]));
+        vi.stubGlobal('fetch', fetcher);
+        const { getFactorCandlesWithReason, getDailyCandlesWithReason } = await import('./alpaca.actions');
+        expect(await getFactorCandlesWithReason('BINANCE:BTCUSDT', '1d')).toEqual(await getDailyCandlesWithReason('BINANCE:BTCUSDT', 400));
+        expect(fetcher).toHaveBeenCalledTimes(1);
+        expect(new URL(fetcher.mock.calls[0][0]).searchParams.get('interval')).toBe('1d');
+    });
+});
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
 describe('market-aware daily candles', () => {

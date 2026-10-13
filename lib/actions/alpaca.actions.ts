@@ -1,10 +1,11 @@
 'use server';
 
 import { getCandlesWithReason } from './finnhub.actions';
-import { binanceCandles, taiwanCandles } from '../candles/providers';
+import { binanceCandles, binanceIntervalCandles, taiwanCandles } from '../candles/providers';
 import { candleMarket } from '../candles/symbols';
 import { CandleRequestError, createCandleCache, failure, fetchCandleJson, normalizeCandles } from '../candles/shared';
 import type { CandleFailureReason, CandleResult, CandleSource, RawCandles as CandleArrays } from '../candles/types';
+import type { CryptoInterval } from '../indicators/factor-periods';
 
 // Next 15's server-action transform rejects type re-exports; local aliases are erased correctly.
 export type RawCandles = CandleArrays;
@@ -25,18 +26,21 @@ export async function __resetCryptoPairCacheForTests(): Promise<void> {
 
 type AlpacaBar = { t?: string; o?: number; h?: number; l?: number; c?: number; v?: number };
 
-async function alpacaBars(symbol: string, days: number, crypto: boolean): Promise<CandleResult> {
+async function alpacaBars(symbol: string, days: number, crypto: boolean, interval: CryptoInterval = '1d'): Promise<CandleResult> {
     const source: CandleSource = { provider: 'alpaca', symbol, timeZone: crypto ? 'UTC' : 'America/New_York' };
     const key = process.env.ALPACA_API_KEY?.trim();
     const secret = process.env.ALPACA_API_SECRET?.trim();
     if (!key || !secret) return failure('missing-config', source);
-    return barsCache.get(`alpaca:${crypto}:${symbol}:${days}`, source, async () => {
+    return barsCache.get(`alpaca:${crypto}:${symbol}:${days}:${interval}`, source, async () => {
         const end = new Date();
-        const start = new Date(end.getTime() - days * 86400_000);
+        const duration = interval === '1d' ? null : { '4h': 4, '8h': 8, '12h': 12 }[interval] * 3600_000;
+        const start = new Date(duration === null ? end.getTime() - days * 86400_000
+            : Math.floor(end.getTime() / duration) * duration - 550 * duration);
         const path = crypto ? '/v1beta3/crypto/us/bars' : `/v2/stocks/${encodeURIComponent(symbol)}/bars`;
         const query = new URLSearchParams({
             ...(crypto ? { symbols: symbol } : { feed: 'iex' }),
-            timeframe: '1Day', start: start.toISOString(), end: end.toISOString(), limit: '1000', sort: 'asc',
+            timeframe: interval === '1d' ? '1Day' : { '4h': '4Hour', '8h': '8Hour', '12h': '12Hour' }[interval],
+            start: start.toISOString(), end: end.toISOString(), limit: '1000', sort: 'asc',
         });
         const data = await fetchCandleJson(`https://data.alpaca.markets${path}?${query}`, {
             'APCA-API-KEY-ID': key, 'APCA-API-SECRET-KEY': secret,
@@ -46,10 +50,25 @@ async function alpacaBars(symbol: string, days: number, crypto: boolean): Promis
             throw new CandleRequestError('no-data');
         }
         if (!Array.isArray(bars)) throw new CandleRequestError('api-error');
-        return normalizeCandles(bars.map(bar => ({
+        const closedBars = duration === null ? bars : bars.filter(bar => Date.parse(bar?.t ?? '') + duration <= end.getTime());
+        return normalizeCandles(closedBars.map(bar => ({
             t: Date.parse(bar?.t ?? '') / 1000, o: bar?.o, h: bar?.h, l: bar?.l, c: bar?.c, v: bar?.v,
         })));
     });
+}
+
+/** Independent four-factor history; daily indicator consumers retain their existing entrypoint. */
+export async function getFactorCandlesWithReason(symbol: string, interval: CryptoInterval): Promise<CandleResult> {
+    if (interval === '1d') return getDailyCandlesWithReason(symbol, 400);
+    if (!['4h', '8h', '12h'].includes(interval)) return failure('api-error');
+    const market = candleMarket(symbol);
+    if (market.kind === 'binance') return binanceIntervalCandles(market.symbol, interval);
+    if (market.kind === 'coingecko') {
+        const resolved = await resolveCryptoPair(market.symbol);
+        if (!resolved.pair) return failure(resolved.reason ?? 'unsupported-symbol');
+        return alpacaBars(resolved.pair, 400, true, interval);
+    }
+    return failure('unsupported-symbol');
 }
 
 /** Compatible low-level helpers: null on failure. */

@@ -1,8 +1,27 @@
 import { CandleRequestError, createCandleCache, fetchCandleJson, normalizeCandles } from './shared';
 import type { CandleResult, CandleSource } from './types';
+import type { CryptoInterval } from '../indicators/factor-periods';
 
 const cache = createCandleCache();
 const DAY = 86400_000;
+
+/** Recent interval history for crypto factors only; never substitutes daily bars. */
+export async function binanceIntervalCandles(pair: string, interval: Exclude<CryptoInterval, '1d'>): Promise<CandleResult> {
+    const source: CandleSource = { provider: 'binance', symbol: pair, timeZone: 'UTC' };
+    return cache.get(`binance:${pair}:${interval}:550`, source, async () => {
+        const duration = { '4h': 4, '8h': 8, '12h': 12 }[interval] * 3600_000;
+        const now = Date.now();
+        const start = Math.floor(now / duration) * duration - 550 * duration;
+        const query = new URLSearchParams({ symbol: pair, interval, startTime: String(start), endTime: String(now), limit: '1000' });
+        const data = await fetchCandleJson(`https://data-api.binance.vision/api/v3/klines?${query}`);
+        if (!Array.isArray(data) || data.some(row => !Array.isArray(row) || row.length < 7 || !Number.isFinite(Number(row[6])))) {
+            throw new CandleRequestError('api-error');
+        }
+        return normalizeCandles(data.filter(row => Number(row[6]) < now).map(row => ({
+            t: Number(row[0]) / 1000, o: row[1], h: row[2], l: row[3], c: row[4], v: row[5],
+        })));
+    });
+}
 
 export async function binanceCandles(pair: string, days: number): Promise<CandleResult> {
     const source: CandleSource = { provider: 'binance', symbol: pair, timeZone: 'UTC' };
