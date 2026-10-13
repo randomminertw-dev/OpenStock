@@ -3,16 +3,8 @@
 import { useState } from 'react';
 import { ChevronDown, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Category, IndicatorResult, Signal } from '@/lib/indicators/types';
-
-export const CATEGORY_LABEL: Record<Category, string> = {
-    trend: '趨勢',
-    momentum: '動能',
-    volatility: '波動',
-    volume: '成交量',
-    support: '支撐壓力',
-    breadth: '市場廣度',
-};
+import { CATEGORY_LABEL } from '@/lib/indicators/category-labels';
+import type { IndicatorResult, Signal } from '@/lib/indicators/types';
 
 const SIGNAL_META: Record<Exclude<Signal, null>, { label: string; symbol: string; className: string; Icon: typeof TrendingUp }> = {
     1: { label: '看漲', symbol: '▲', className: 'text-up', Icon: TrendingUp },

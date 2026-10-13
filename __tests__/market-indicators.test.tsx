@@ -320,6 +320,46 @@ describe('rendered stock details', () => {
         expect(fetcher.mock.calls.filter(([url]) => url.includes('/klines') || url.includes('TaiwanStockPrice'))).toHaveLength(symbol.startsWith('CG:') ? 0 : 2);
     });
 
+    it('explains neutral, non-directional and unavailable IDS-Period results separately', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+            const url = new URL(input);
+            if (url.hostname !== 'api.finmindtrade.com') return json({}, 404);
+            return json({ status: 200, data: rows(270).map(r => ({
+                date: new Date(r.t).toISOString().slice(0, 10), stock_id: '2330',
+                open: 100, max: 101, min: 99, close: 100,
+                // Explicitly missing volume makes CMF unavailable without affecting RSI/ATR.
+            })) });
+        }));
+        const { getPeriodAssessment } = await import('@/lib/actions/indicators.actions');
+        const period = await getPeriodAssessment('2330.TW');
+        expect(period?.idsPeriod.RSI).toMatchObject({ idsPct: null, validCount: 5 });
+        expect(period?.idsPeriod.ATR).toMatchObject({ idsPct: null, validCount: 5 });
+        expect(period?.idsPeriod.CMF).toMatchObject({ idsPct: null, validCount: 0 });
+
+        const { default: Dashboard } = await import('@/components/stocks/IndicatorDashboard');
+        const html = renderToStaticMarkup(await resolveServerTree(await Dashboard({ symbol: '2330.TW' })));
+        expect(html).toContain('全中立（5/5）');
+        expect(html).toContain('不適用（無方向）');
+        expect(html).toContain('資料不足（0/5）');
+        expect(html).toContain('ATR');
+        const breadthCard = html.match(/<details aria-label="市場廣度指標明細"[\s\S]*?<\/details>/)?.[0];
+        expect(breadthCard).toContain('無有效指標');
+        expect(breadthCard).not.toContain('中性');
+    });
+
+    it('lists six category names and their constituent indicators in expandable cards', async () => {
+        vi.stubGlobal('fetch', marketFetch());
+        const { default: Dashboard } = await import('@/components/stocks/IndicatorDashboard');
+        const html = renderToStaticMarkup(await resolveServerTree(await Dashboard({ symbol: '2330.TW' })));
+        for (const label of ['趨勢', '動能', '波動', '成交量', '支撐壓力', '市場廣度']) {
+            expect(html).toContain(`aria-label="${label}指標明細"`);
+        }
+        expect(html).toContain('SMA（SMA200）');
+        expect(html).toContain('RSI（14）');
+        expect(html).toContain('12/12 有效');
+        expect(html).toContain('有效指標');
+    });
+
     it('does not label a provider outage as insufficient history', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({}, 429)));
         const { default: Dashboard } = await import('@/components/stocks/IndicatorDashboard');

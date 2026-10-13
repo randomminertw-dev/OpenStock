@@ -18,7 +18,7 @@ const INDICATOR_LABEL: Record<VariantIndicatorId, string> = {
     RSI: 'RSI',
     ADX_DMI: 'ADX/DMI',
     CMF: 'CMF',
-    ATR: 'ATR%',
+    ATR: 'ATR',
 };
 
 const PERIODS: readonly number[] = [7, 14, 20, 21, 28];

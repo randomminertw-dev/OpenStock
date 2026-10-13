@@ -4,8 +4,10 @@ import { getFactorPreference } from '@/lib/actions/factor-preferences.actions';
 import { defaultFactorPreference, marketForSymbol } from '@/lib/indicators/factor-periods';
 import { getNews } from '@/lib/actions/finnhub.actions';
 import { scoreNewsSentiment } from '@/lib/factors/scoring';
+import { CATEGORY_LABEL } from '@/lib/indicators/category-labels';
+import { PERIOD_CANDIDATES } from '@/lib/indicators/variants';
 import { cn } from '@/lib/utils';
-import IndicatorTable, { CATEGORY_LABEL } from './IndicatorTable';
+import IndicatorTable from './IndicatorTable';
 import FactorSettings from './FactorSettings';
 import PeriodExplorer from './PeriodExplorer';
 import type { Category, IDSResult, IndicatorResult } from '@/lib/indicators/types';
@@ -25,12 +27,19 @@ const PERIOD_LABEL: Record<(typeof PERIOD_IDS)[number], string> = {
     RSI: 'RSI',
     ADX_DMI: 'ADX/DMI',
     CMF: 'CMF',
-    ATR: 'ATR%',
+    ATR: 'ATR',
 };
 
 function fmtPct(v: number | null, digits = 1): string {
     if (v === null || !Number.isFinite(v)) return 'N/A';
     return `${v.toFixed(digits)}%`;
+}
+
+function periodStatus(id: (typeof PERIOD_IDS)[number], result: IDSPeriodResult | undefined): string {
+    if (result?.idsPct !== null && result?.idsPct !== undefined) return fmtPct(result.idsPct);
+    if (!result || result.validCount === 0) return `資料不足（0/${PERIOD_CANDIDATES.length}）`;
+    if (id === 'ATR') return '不適用（無方向）';
+    return `全中立（${result.validCount}/${PERIOD_CANDIDATES.length}）`;
 }
 
 function ResultCard({ ids }: { ids: IDSResult }) {
@@ -92,7 +101,7 @@ function ResultCard({ ids }: { ids: IDSResult }) {
 
 function CategoryOverview({ results }: { results: IndicatorResult[] }) {
     return (
-        <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="技術指標分類總覽">
             {CATEGORIES.map((cat) => {
                 const items = results.filter((r) => r.category === cat);
                 const valid = items.filter((r) => r.signal !== null);
@@ -101,16 +110,30 @@ function CategoryOverview({ results }: { results: IndicatorResult[] }) {
                 const catDirection = up > down ? 'bullish' : down > up ? 'bearish' : 'neutral';
                 const meta = DIRECTION_META[catDirection];
                 return (
-                    <div key={cat} className="rounded-xl border border-line px-3 py-2">
-                        <p className="text-[12px] font-bold text-foreground">{CATEGORY_LABEL[cat]}</p>
-                        <p className={cn('mt-1 flex items-center gap-1 text-[13px] font-bold', meta.text)}>
-                            <meta.Icon className="size-3.5" />
-                            {meta.label}
-                            <span className="num ml-auto text-[11px] font-semibold text-faint">
-                                {valid.length}/{items.length}
+                    <details key={cat} aria-label={`${CATEGORY_LABEL[cat]}指標明細`}
+                        className="group min-w-0 rounded-xl border border-line">
+                        <summary className="flex min-h-14 cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold [&::-webkit-details-marker]:hidden">
+                            <span className="min-w-0 flex-1">
+                                <span className="block text-[12px] font-bold text-foreground">{CATEGORY_LABEL[cat]}</span>
+                                <span className={cn('mt-1 flex items-center gap-1 text-[13px] font-bold', meta.text)}>
+                                    <meta.Icon className="size-3.5 shrink-0" />
+                                    {valid.length === 0 ? '無有效指標' : meta.label}
+                                </span>
                             </span>
-                        </p>
-                    </div>
+                            <span className="num shrink-0 text-[11px] font-semibold text-faint">{valid.length}/{items.length} 有效指標</span>
+                            <ChevronDown className="size-4 shrink-0 text-faint transition-transform group-open:rotate-180" />
+                        </summary>
+                        <ul className="border-t border-line px-3 py-1.5">
+                            {items.map(item => (
+                                <li key={item.id} className="flex items-start justify-between gap-2 py-1.5 text-[11.5px] leading-snug">
+                                    <span className="min-w-0 break-words text-foreground">{item.name}</span>
+                                    <span className={cn('shrink-0 font-semibold', item.signal === 1 ? 'text-up' : item.signal === -1 ? 'text-down' : 'text-faint')}>
+                                        {item.signal === 1 ? '看漲' : item.signal === -1 ? '看跌' : item.signal === 0 ? '中立' : 'N/A'}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
                 );
             })}
         </div>
@@ -170,7 +193,7 @@ function MultiLevelIds({
                             <li key={id} className="flex items-center justify-between gap-1 text-[11px]">
                                 <span className="text-faint">{PERIOD_LABEL[id]}</span>
                                 <span className="num font-bold text-foreground">
-                                    {fmtPct(idsPeriod[id]?.idsPct ?? null)}
+                                    {periodStatus(id, idsPeriod[id])}
                                 </span>
                             </li>
                         ))}
