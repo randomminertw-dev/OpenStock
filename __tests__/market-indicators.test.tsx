@@ -308,7 +308,7 @@ describe('rendered stock details', () => {
         expect(html).toContain('資料日期');
         expect(html).toContain('跨市場不可直接比較');
         expect(html).toContain('樣本');
-        expect(html).toContain('相對該標的自身歷史波動');
+        expect(html).toContain('歷史排名僅供比較自身過去');
         if (symbol === '2330.TW') expect(html).toContain('未還原');
         if (symbol.startsWith('BINANCE:')) {
             expect(html).toContain('BTCUSDT');

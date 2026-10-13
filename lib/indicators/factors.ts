@@ -31,6 +31,8 @@ export interface FactorScore {
   reason: string;
   /** R 分位計算實際採用的有效 ATR% 樣本數。 */
   sampleCount?: number;
+  /** R 的當期 ATR%，獨立於歷史分位，樣本不足時仍可顯示。 */
+  atrPct?: number;
 }
 
 /** computeFactors 的回傳型別。 */
@@ -287,25 +289,32 @@ function computeR(candles: Candle[], n: number): FactorScore {
   for (let i = n - 1; i < tr.length; i++) {
     const atr = sTR[i] as number;
     const c = candles[i + 1].c; // tr[i] 對應第 i+1 根 K 線
-    if (c === 0) continue; // 價格為 0 時 ATR% 無定義，跳過該筆
+    if (!Number.isFinite(c) || c <= 0) continue; // 無效收盤價的 ATR% 無定義
     atrPct.push((100 * atr) / c);
   }
   const window = atrPct.slice(-R_LOOKBACK);
-  if (window.length < R_MIN_HISTORY) {
-    return nullScore(
-      'R',
-      n,
-      `資料不足：R 需要至少 ${R_MIN_HISTORY} 筆 ATR% 歷史` +
-        `（截至 t 當下已存在 ${window.length} 筆）`,
-      window.length,
-    );
+  if (!Number.isFinite(candles[len - 1].c) || candles[len - 1].c <= 0) {
+    return nullScore('R', n, '最新收盤價無效，當期 ATR% 與歷史排名無法計算', window.length);
   }
   const current = window[window.length - 1];
+  if (window.length < R_MIN_HISTORY) {
+    return {
+      ...nullScore(
+        'R',
+        n,
+        `資料不足：R 需要至少 ${R_MIN_HISTORY} 筆 ATR% 歷史` +
+          `（截至 t 當下已存在 ${window.length} 筆）`,
+        window.length,
+      ),
+      ...(current === undefined ? {} : { atrPct: current }),
+    };
+  }
   const pct = percentileAverageRank(window, current);
   const score = 100 * pct;
   return {
     id: 'R',
     sampleCount: window.length,
+    atrPct: current,
     score,
     n,
     formulaVersion: FORMULA_VERSION,

@@ -8,7 +8,7 @@ const FACTOR_META: Record<FactorId, { name: string; hint: string; Icon: typeof T
     T: { name: '趨勢', hint: '均線差距換算成 ATR 倍數；正值偏多、負值偏空，無上下限。', Icon: TrendingUp },
     M: { name: '動能', hint: 'RSI 轉成 −100～100 的方向分數；正值偏多、負值偏空。', Icon: Zap },
     V: { name: '量能', hint: 'CMF 轉成 −100～100 的資金流向分數；正值偏多、負值偏空。', Icon: BarChart3 },
-    R: { name: '波動風險', hint: '0～100 的歷史波動分位；越高表示近期波動相對越大。', Icon: ShieldAlert },
+    R: { name: '波動風險', hint: 'ATR% 是近期波幅相對收盤價的比例；歷史排名僅表示相對自身過去的位置。', Icon: ShieldAlert },
 };
 
 const ORDER: FactorId[] = ['T', 'M', 'V', 'R'];
@@ -24,6 +24,7 @@ function FactorCard({ factor, interval }: { factor: FactorScore; interval: FourF
     const meta = FACTOR_META[factor.id];
     const isRisk = factor.id === 'R';
     const missing = factor.score === null || !Number.isFinite(factor.score);
+    const riskValueAvailable = isRisk && typeof factor.atrPct === 'number' && Number.isFinite(factor.atrPct);
     const riskRank = isRisk && !missing && factor.sampleCount !== undefined && factor.sampleCount > 1
         ? 1 + factor.score! * (factor.sampleCount - 1) / 100
         : null;
@@ -51,14 +52,21 @@ function FactorCard({ factor, interval }: { factor: FactorScore; interval: FourF
                 </p>
             </div>
 
-            <p className={cn('num mt-1.5 text-[26px] font-bold leading-none', scoreClass)}>
-                {/* R 為 [0,100] 的強度分數，不帶正負號（無方向性） */}
-                {missing ? 'N/A' : isRisk ? Math.abs(factor.score!).toFixed(1) : fmtScore(factor.score!)}
+            {isRisk && <p className="num mt-1.5 text-[11px] font-semibold text-faint">近期波動幅度 ATR%({factor.n})</p>}
+            <p className={cn('num text-[26px] font-bold leading-none', isRisk ? 'mt-1' : 'mt-1.5', scoreClass)}>
+                {isRisk ? (riskValueAvailable ? `${factor.atrPct!.toFixed(2)}%` : 'N/A') : missing ? 'N/A' : fmtScore(factor.score!)}
                 {factor.id === 'T' && !missing && <span className="ml-1 text-[12px] font-semibold">倍 ATR</span>}
             </p>
 
             <p className="mt-1 text-[11px] leading-relaxed text-faint">{meta.hint}</p>
-            {missing ? (
+            {isRisk && riskValueAvailable && (
+                <p className="num mt-1.5 text-[11px] leading-relaxed text-faint">
+                    {missing
+                        ? `歷史排名資料不足（${factor.sampleCount ?? 0}/126 筆）`
+                        : `相對自身歷史：近 ${factor.sampleCount} 筆${factor.score === 0 ? '最低（百分位 0／100）' : `第 ${factor.score!.toFixed(1)} 百分位`}`}
+                </p>
+            )}
+            {missing && !riskValueAvailable ? (
                 <p className="mt-1.5 text-[11.5px] leading-relaxed text-faint">{factor.reason}</p>
             ) : (
                 <p className="num mt-1.5 text-[11px] text-faint">
@@ -102,6 +110,9 @@ function FactorCard({ factor, interval }: { factor: FactorScore; interval: FourF
                         </>
                     )}
                     <p className="font-semibold text-foreground">本次計算</p>
+                    {isRisk && riskValueAvailable && missing && (
+                        <p className="num break-words">本次 ATR%({factor.n}) = {factor.atrPct!.toFixed(2)}%</p>
+                    )}
                     <p className="break-words">{factor.reason}</p>
                     {riskRank !== null && (
                         <p className="num break-words">
@@ -129,7 +140,7 @@ export default function FactorCards({ factors, assessment }: { factors: FourFact
             </div>
 
             <p className="mt-2 text-[11.5px] leading-relaxed text-faint">
-                T 是帶方向的均線差（倍 ATR，不設 ±100 上限）；M / V 為標準化分數。正值偏多、負值偏空；R 是相對該標的自身歷史波動的分位（0–100），不代表方向，皆非預測機率。
+                T 是帶方向的均線差（倍 ATR，不設 ±100 上限）；M / V 為標準化分數。正值偏多、負值偏空；R 主值為 ATR%，歷史排名僅供比較自身過去，不代表零風險、漲跌方向或預測機率。
             </p>
             {assessment && (
                 <p className="num mt-1 text-[11px] leading-relaxed text-faint">

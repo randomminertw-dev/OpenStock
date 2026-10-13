@@ -124,7 +124,10 @@ describe('computeFactors — 邊界', () => {
     }
     const candles = makeFlat(150);
     candles[149].c = 0;
-    expect(computeFactors(candles).R.sampleCount).toBe(135);
+    const invalidLatest = computeFactors(candles).R;
+    expect(invalidLatest.sampleCount).toBe(135);
+    expect(invalidLatest.atrPct).toBeUndefined();
+    expect(invalidLatest.score).toBeNull();
     expect(computeFactors(makeFlat(150)).R.reason).toContain('136');
   });
 
@@ -156,6 +159,20 @@ describe('computeFactors — 邊界', () => {
     expect(R.score).not.toBeNull();
     expect(R.score as number).toBeGreaterThanOrEqual(0);
     expect(R.score as number).toBeLessThanOrEqual(100);
+  });
+
+  it('R：歷史排名為零仍提供正的 ATR% 波動幅度', () => {
+    const { R } = computeFactors(makeSpreadTrend(300, 1));
+    expect(R.score).toBe(0);
+    expect(R.sampleCount).toBe(252);
+    expect(R.atrPct).toBeCloseTo(200 / 399, 8);
+  });
+
+  it('R：歷史不足以排名時仍提供可計算的 ATR%', () => {
+    const { R } = computeFactors(makeSpreadTrend(100, 1));
+    expect(R.score).toBeNull();
+    expect(R.sampleCount).toBe(86);
+    expect(R.atrPct).toBeCloseTo(200 / 199, 8);
   });
 
   it('所有因素皆回傳繁體中文 reason、n 與 formulaVersion', () => {
