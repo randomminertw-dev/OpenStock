@@ -1,6 +1,6 @@
 import type { TaiwanExchange, TaiwanKey } from './types';
 
-const TAIWAN_CODE_REGEX = /^[0-9][A-Z0-9]{3,7}$/;
+export const TAIWAN_CODE_REGEX = /^[0-9][A-Z0-9]{3,7}$/i;
 
 /**
  * Parses strings that explicitly indicate a Taiwan market (TWSE:code, TPEX:code,

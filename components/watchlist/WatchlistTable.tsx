@@ -11,6 +11,7 @@ import { useLiveQuotes } from "@/hooks/useLiveQuotes";
 import { SearchButton } from "@/components/SearchCommand";
 import { formatNumber, formatPrice } from "@/lib/utils";
 import { hasFinnhubQuotes } from "@/lib/markets";
+import { TAIWAN_CODE_REGEX } from "@/lib/taiwan/symbols";
 import type { getWatchlistData } from "@/lib/actions/finnhub.actions";
 
 type Row = Awaited<ReturnType<typeof getWatchlistData>>[number];
@@ -23,7 +24,8 @@ export function isTaiwanWatchlistSymbol(symbol: string): boolean {
         upper.startsWith('TWSE:') ||
         upper.startsWith('TPEX:') ||
         upper.endsWith('.TW') ||
-        upper.endsWith('.TWO')
+        upper.endsWith('.TWO') ||
+        TAIWAN_CODE_REGEX.test(upper)
     );
 }
 
@@ -119,7 +121,7 @@ export default function WatchlistTable({ initialRows }: { initialRows: Row[] }) 
                                     </Link>
                                 </td>
                                 <td className="is-num font-semibold text-foreground">
-                                    <PriceFlash value={row.price ?? 0} className="px-1">
+                                    <PriceFlash value={row.price} className="px-1">
                                         {formatWatchlistPrice(row.price, row.currency)}
                                     </PriceFlash>
                                 </td>

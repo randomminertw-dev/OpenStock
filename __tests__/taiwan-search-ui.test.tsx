@@ -1,3 +1,5 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/better-auth/auth', () => ({
@@ -9,7 +11,21 @@ vi.mock('@/database/mongoose', () => ({
     connectToDatabase: vi.fn().mockResolvedValue(true),
 }));
 
-import { createSearchSequenceGuard, isImeComposing } from '../components/SearchCommand';
+vi.mock('@/components/ui/command', () => ({
+    CommandDialog: ({ open, children, className }: { open?: boolean; children?: React.ReactNode; className?: string }) =>
+        open ? <div className={className}>{children}</div> : null,
+    CommandInput: ({ placeholder, value }: { placeholder?: string; value?: string }) => (
+        <input placeholder={placeholder} defaultValue={value} />
+    ),
+    CommandList: ({ children, className }: { children?: React.ReactNode; className?: string }) => (
+        <div className={className}>{children}</div>
+    ),
+    CommandEmpty: ({ children, className }: { children?: React.ReactNode; className?: string }) => (
+        <div className={className}>{children}</div>
+    ),
+}));
+
+import SearchCommand, { createSearchSequenceGuard, getSearchIndicatorText, isImeComposing } from '../components/SearchCommand';
 import { formatWatchlistPrice, formatWatchlistChange, isTaiwanWatchlistSymbol } from '../components/watchlist/WatchlistTable';
 
 describe('SearchCommand UI logic and safeguards', () => {
@@ -59,6 +75,40 @@ describe('SearchCommand UI logic and safeguards', () => {
         const imeEnter3 = { key: 'Enter', isComposing: false, keyCode: 229 };
         expect(isImeComposing(imeEnter3)).toBe(true);
     });
+
+    it('displays readiness / uninitialized index error in search-list-indicator and does not claim "Nothing matches"', () => {
+        // Direct helper logic test
+        const indicatorWithDbError = getSearchIndicatorText({
+            errorMessage: '台股資料庫準備中或同步未啟用',
+            isSearchMode: true,
+            searchTerm: '2330',
+        });
+        expect(indicatorWithDbError).toBe('台股資料庫準備中或同步未啟用');
+        expect(indicatorWithDbError).not.toContain('Nothing matches');
+
+        // Normal search empty state
+        const indicatorNormalEmpty = getSearchIndicatorText({
+            errorMessage: null,
+            isSearchMode: true,
+            searchTerm: 'UNKNOWN',
+        });
+        expect(indicatorNormalEmpty).toBe('Nothing matches “UNKNOWN”');
+
+        // Rendered component verification
+        const html = renderToStaticMarkup(
+            <SearchCommand
+                initialStocks={[]}
+                defaultOpen={true}
+                initialMounted={true}
+                initialErrorMessage="台股資料庫準備中或同步未啟用"
+                initialSearchTerm="2330"
+            />
+        );
+
+        expect(html).toContain('search-list-indicator');
+        expect(html).toContain('台股資料庫準備中或同步未啟用');
+        expect(html).not.toContain('Nothing matches');
+    });
 });
 
 describe('WatchlistTable presentation and helpers', () => {
@@ -67,6 +117,8 @@ describe('WatchlistTable presentation and helpers', () => {
         expect(isTaiwanWatchlistSymbol('TPEX:6488')).toBe(true);
         expect(isTaiwanWatchlistSymbol('2330.TW')).toBe(true);
         expect(isTaiwanWatchlistSymbol('6488.TWO')).toBe(true);
+        expect(isTaiwanWatchlistSymbol('0050')).toBe(true);
+        expect(isTaiwanWatchlistSymbol('2330')).toBe(true);
 
         expect(isTaiwanWatchlistSymbol('AAPL')).toBe(false);
         expect(isTaiwanWatchlistSymbol('MSFT')).toBe(false);

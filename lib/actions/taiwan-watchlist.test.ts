@@ -244,6 +244,40 @@ describe('Taiwan watchlist and pricing', () => {
         expect(finnhubCalls).toHaveLength(0);
     });
 
+    it('supports bare Taiwan codes (0050, 2330) and returns official quote in close mode without calling Finnhub', async () => {
+        const { getWatchlistData } = await import('./finnhub.actions');
+
+        const rows0050 = await getWatchlistData(['0050']);
+        expect(rows0050).toHaveLength(1);
+        const row0050 = rows0050[0];
+        expect(row0050.symbol).toBe('0050');
+        expect(row0050.name).toBe('元大台灣50');
+        expect(row0050.price).toBe(184);
+        expect(row0050.change).toBe(4);
+        expect(row0050.currency).toBe('TWD');
+        expect(row0050.tradingDate).toBe('2026-10-13');
+        expect(row0050.source).toBe('twse');
+        expect(row0050.mode).toBe('close');
+
+        const rows2330 = await getWatchlistData(['2330']);
+        expect(rows2330).toHaveLength(1);
+        const row2330 = rows2330[0];
+        expect(row2330.symbol).toBe('2330');
+        expect(row2330.name).toBe('台積電');
+        expect(row2330.price).toBe(1000);
+        expect(row2330.change).toBe(0);
+        expect(row2330.currency).toBe('TWD');
+        expect(row2330.tradingDate).toBe('2026-10-13');
+        expect(row2330.source).toBe('twse');
+        expect(row2330.mode).toBe('close');
+
+        // External Finnhub quote or profile must not be called for bare Taiwan codes
+        const finnhubCalls = mockFetch.mock.calls.filter((call) =>
+            String(call[0]).includes('finnhub.io')
+        );
+        expect(finnhubCalls).toHaveLength(0);
+    });
+
     it('differentiates quote null from zero change, and does not default unknown currency to USD', async () => {
         const { getWatchlistData } = await import('./finnhub.actions');
 

@@ -9,7 +9,7 @@ import { getSession } from '@/lib/better-auth/auth';
 import { CandleRequestError, createCandleCache, failure, normalizeCandles } from '../candles/shared';
 import type { CandleResult, CandleSource } from '../candles/types';
 import { getTaiwanQuote, getTaiwanSecurity, searchTaiwanSecurities } from '@/lib/taiwan/reads';
-import { parseTaiwanKey } from '@/lib/taiwan/symbols';
+import { parseTaiwanKey, TAIWAN_CODE_REGEX } from '@/lib/taiwan/symbols';
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 // Key pool: each free key has its own 60 req/min, so N keys = N x the quota. Rotated per request.
@@ -211,6 +211,7 @@ export async function getWatchlistData(symbols: string[]) {
             upper.startsWith('TPEX:') ||
             upper.endsWith('.TW') ||
             upper.endsWith('.TWO') ||
+            TAIWAN_CODE_REGEX.test(upper) ||
             parseTaiwanKey(upper) !== null;
 
         if (isTw) {
@@ -406,7 +407,7 @@ export const searchStocks = cache(async (query?: string): Promise<StockWithWatch
         // A public server action: only signed-in users may spend quota on searches
         if (!(await getSession())?.user) return [];
 
-        const isBareCode = /^[0-9][A-Z0-9]{3,7}$/i.test(trimmed);
+        const isBareCode = TAIWAN_CODE_REGEX.test(trimmed);
         const hasChinese = /[\u4e00-\u9fa5]/.test(trimmed);
         const explicitTaiwan = parseTaiwanKey(trimmed) !== null;
         const isTaiwanLikely = isBareCode || hasChinese || explicitTaiwan;

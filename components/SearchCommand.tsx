@@ -42,16 +42,52 @@ export function isImeComposing(event: {
     return false;
 }
 
-export default function SearchCommand({ initialStocks }: { initialStocks: StockWithWatchlistStatus[] }) {
-    const [open, setOpen] = useState(false)
-    const [searchTerm, setSearchTerm] = useState("")
-    const [loading, setLoading] = useState(false)
+/**
+ * Resolves the message to display in .search-list-indicator based on error state and search term.
+ * If search failed due to database unreadiness or uninitialized index, displays the error message
+ * without claiming "Nothing matches".
+ */
+export function getSearchIndicatorText({
+    errorMessage,
+    isSearchMode,
+    searchTerm,
+}: {
+    errorMessage?: string | null;
+    isSearchMode: boolean;
+    searchTerm: string;
+}): string {
+    if (errorMessage) {
+        return errorMessage;
+    }
+    if (isSearchMode) {
+        return `Nothing matches “${searchTerm.trim()}”`;
+    }
+    return 'No stocks available';
+}
+
+export default function SearchCommand({
+    initialStocks,
+    defaultOpen = false,
+    initialMounted = false,
+    initialErrorMessage = null,
+    initialSearchTerm = '',
+}: {
+    initialStocks: StockWithWatchlistStatus[];
+    defaultOpen?: boolean;
+    initialMounted?: boolean;
+    initialErrorMessage?: string | null;
+    initialSearchTerm?: string;
+}) {
+    const [open, setOpen] = useState(defaultOpen);
+    const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
+    const [loading, setLoading] = useState(false);
     const [stocks, setStocks] = useState<StockWithWatchlistStatus[]>(initialStocks);
+    const [errorMessage, setErrorMessage] = useState<string | null>(initialErrorMessage);
     const searchSeqRef = useRef(0);
     const isComposingRef = useRef(false);
 
     // The palette starts closed, so render it only after hydration (avoids Radix id mismatches)
-    const [mounted, setMounted] = useState(false);
+    const [mounted, setMounted] = useState(initialMounted);
     useEffect(() => setMounted(true), []);
 
     const isSearchMode = !!searchTerm.trim();
@@ -74,17 +110,26 @@ export default function SearchCommand({ initialStocks }: { initialStocks: StockW
     }, [])
 
     const handleSearch = async () => {
-        if (!isSearchMode) return setStocks(initialStocks);
+        if (!isSearchMode) {
+            setErrorMessage(null);
+            return setStocks(initialStocks);
+        }
 
         const seq = ++searchSeqRef.current;
         setLoading(true);
         try {
             const results = await searchStocks(searchTerm.trim());
             if (seq === searchSeqRef.current) {
+                setErrorMessage(null);
                 setStocks(results);
             }
-        } catch {
+        } catch (err: unknown) {
             if (seq === searchSeqRef.current) {
+                const message =
+                    err instanceof Error && err.message
+                        ? err.message
+                        : '台股資料庫準備中或同步未啟用';
+                setErrorMessage(message);
                 setStocks([]);
             }
         } finally {
@@ -103,6 +148,7 @@ export default function SearchCommand({ initialStocks }: { initialStocks: StockW
     const handleSelectStock = () => {
         setOpen(false);
         setSearchTerm("");
+        setErrorMessage(null);
         setStocks(initialStocks);
     }
 
@@ -136,7 +182,7 @@ export default function SearchCommand({ initialStocks }: { initialStocks: StockW
                     <CommandEmpty className="search-list-empty">Searching</CommandEmpty>
                 ) : displayStocks?.length === 0 ? (
                     <div className="search-list-indicator">
-                        {isSearchMode ? `Nothing matches “${searchTerm.trim()}”` : 'No stocks available'}
+                        {getSearchIndicatorText({ errorMessage, isSearchMode, searchTerm })}
                     </div>
                 ) : (
                     <ul>
