@@ -12,6 +12,9 @@ import { hasFinnhubQuotes } from "@/lib/markets";
 import { isCoinGeckoSymbol, coinIdFromSymbol } from "@/lib/coingecko";
 import { symbolInfoConfig } from "@/lib/constants";
 import TradingViewWidget from "@/components/TradingViewWidget";
+import { candleMarket } from "@/lib/candles/symbols";
+import TaiwanHeader from "@/components/stocks/TaiwanHeader";
+import { getTaiwanSecurity, getTaiwanQuote } from "@/lib/actions/taiwan.actions";
 
 // Symbols Finnhub's free plan can't price (most non-US listings) use TradingView's quote panel instead.
 async function TradingViewHeader({ symbol }: { symbol: string }) {
@@ -82,6 +85,13 @@ async function CoinGeckoHeader({ symbol }: { symbol: string }) {
 }
 
 export default async function StockHeader({ symbol }: { symbol: string }) {
+    if (candleMarket(symbol).kind === 'taiwan') {
+        const [security, quote] = await Promise.all([
+            getTaiwanSecurity(symbol),
+            getTaiwanQuote(symbol),
+        ]);
+        return <TaiwanHeader security={security} quote={quote} symbol={symbol} />;
+    }
     if (isCoinGeckoSymbol(symbol)) return <CoinGeckoHeader symbol={symbol} />;
     if (!hasFinnhubQuotes(symbol)) return <TradingViewHeader symbol={symbol} />;
 

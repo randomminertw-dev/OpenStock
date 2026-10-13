@@ -1,6 +1,5 @@
 'use server';
 
-import { requireUserId } from '@/lib/better-auth/auth';
 import {
     getTaiwanSecurity as readSecurity,
     getTaiwanQuote as readQuote,
@@ -38,13 +37,29 @@ export async function getTaiwanDetails(symbol: string): Promise<TaiwanDetails | 
     return await readDetails(symbol);
 }
 
+export async function getTaiwanPageData(symbol: string): Promise<{
+    security: TaiwanSecurity | null;
+    quote: TaiwanQuote | null;
+    history: TaiwanHistory;
+    details: TaiwanDetails | null;
+}> {
+    const [security, quote, history, details] = await Promise.all([
+        readSecurity(symbol),
+        readQuote(symbol),
+        readHistory(symbol, 800),
+        readDetails(symbol),
+    ]);
+    return { security, quote, history, details };
+}
+
 /**
  * Triggers Taiwan history synchronization. Requires signed-in session.
  */
-export async function triggerTaiwanHistorySync(
+export async function requestTaiwanHistoryAction(
     symbol: string,
     days = 800
 ): Promise<TaiwanHistoryStatus> {
+    const { requireUserId } = await import('@/lib/better-auth/auth');
     await requireUserId();
     const sec = await readSecurity(symbol);
     const key = parseTaiwanKey(symbol) ?? (sec ? { exchange: sec.exchange, code: sec.code } : null);
@@ -59,3 +74,8 @@ export async function triggerTaiwanHistorySync(
     }
     return await requestTaiwanHistory(key, days);
 }
+
+/**
+ * Backwards compatible alias for requestTaiwanHistoryAction.
+ */
+export const triggerTaiwanHistorySync = requestTaiwanHistoryAction;

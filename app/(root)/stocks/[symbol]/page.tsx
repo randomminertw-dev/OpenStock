@@ -9,11 +9,18 @@ import {
     TECHNICAL_ANALYSIS_WIDGET_CONFIG,
     COMPANY_PROFILE_WIDGET_CONFIG,
     COMPANY_FINANCIALS_WIDGET_CONFIG,
+    symbolInfoConfig,
 } from "@/lib/constants";
 import { getStockSentimentInsights } from '@/lib/actions/adanos.actions';
 import IndicatorDashboard from "@/components/stocks/IndicatorDashboard";
 import { isCoinGeckoSymbol } from "@/lib/coingecko";
 import { formatSymbolForTradingView, isChartEmbeddable, tradingViewSymbolUrl } from '@/lib/utils';
+import { candleMarket } from "@/lib/candles/symbols";
+import TaiwanHeader from "@/components/stocks/TaiwanHeader";
+import TaiwanChart from "@/components/stocks/TaiwanChart";
+import TaiwanDetails from "@/components/stocks/TaiwanDetails";
+import TaiwanHistoryStatus from "@/components/stocks/TaiwanHistoryStatus";
+import { getTaiwanPageData } from "@/lib/actions/taiwan.actions";
 
 const scriptUrl = `https://s3.tradingview.com/external-embedding/embed-widget-`;
 
@@ -39,6 +46,49 @@ async function Factors({ symbol }: { symbol: string }) {
 export default async function StockDetails({ params }: StockDetailsPageProps) {
     const { symbol: rawSymbol } = await params;
     const symbol = decodeURIComponent(rawSymbol).toUpperCase();
+
+    // Taiwan stocks & ETFs: official closing quote, native chart, details, and sync status
+    if (candleMarket(symbol).kind === 'taiwan') {
+        const { security, quote, history, details } = await getTaiwanPageData(symbol);
+        const tvSymbol = security
+            ? `${security.exchange}:${security.code}`
+            : formatSymbolForTradingView(symbol);
+
+        return (
+            <>
+                <TaiwanHeader security={security} quote={quote} symbol={symbol} />
+                <TaiwanHistoryStatus symbol={symbol} initial={history.status} />
+
+                <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
+                    <div className="flex min-w-0 flex-col gap-3">
+                        <Panel title="Chart" sub="官方日 K · 價量與除權息事件">
+                            <TaiwanChart bars={history.bars} events={details?.events ?? []} />
+                        </Panel>
+                        <TaiwanDetails details={details} />
+                    </div>
+
+                    <div className="flex min-w-0 flex-col gap-3">
+                        <Panel title="盤中參考" sub="TradingView 報價，依其可用資料">
+                            <TradingViewWidget
+                                scriptUrl={`${scriptUrl}symbol-info.js`}
+                                config={symbolInfoConfig(tvSymbol)}
+                                height={180}
+                            />
+                        </Panel>
+                        <Suspense fallback={null}>
+                            <Sentiment symbol={symbol} />
+                        </Suspense>
+                    </div>
+                </div>
+
+                <div className="mt-3">
+                    <Suspense fallback={null}>
+                        <Factors symbol={symbol} />
+                    </Suspense>
+                </div>
+            </>
+        );
+    }
 
     // CoinGecko coins (`CG:` prefix) have no TradingView symbol mapping:
     // show the header with live price and a friendly placeholder instead of

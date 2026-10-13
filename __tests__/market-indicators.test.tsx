@@ -18,6 +18,7 @@ vi.mock('@/lib/actions/factor-preferences.actions', () => ({
 }));
 // Unrelated authenticated header and third-party iframe are outside the indicator flow.
 vi.mock('@/components/stocks/StockHeader', () => ({ default: () => null, StockHeaderSkeleton: () => null }));
+vi.mock('@/components/stocks/TaiwanHeader', () => ({ default: () => null }));
 vi.mock('@/components/TradingViewWidget', () => ({ default: () => null }));
 
 const json = (data: unknown, status = 200) => ({ ok: status < 400, status, json: async () => data });

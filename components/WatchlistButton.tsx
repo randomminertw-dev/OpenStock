@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Star } from "lucide-react";
 import { toast } from "sonner";
-import { addToWatchlist, removeFromWatchlist } from "@/lib/actions/watchlist.actions";
 import { cn } from "@/lib/utils";
 
 interface WatchlistButtonProps {
@@ -27,11 +26,12 @@ const WatchlistButton = ({ symbol, company, isInWatchlist, variant = "button", o
         setAdded(next); // optimistic
         setLoading(true);
         try {
+            const { addToWatchlist, removeFromWatchlist } = await import("@/lib/actions/watchlist.actions");
             if (next) await addToWatchlist(symbol, company);
             else await removeFromWatchlist(symbol);
             toast.success(next ? `${symbol} added to watchlist` : `${symbol} removed from watchlist`);
             onWatchlistChange?.(symbol, next);
-            router.refresh(); // sidebar lists the watchlist from the layout
+            router?.refresh(); // sidebar lists the watchlist from the layout
         } catch (error) {
             console.error("Watchlist action failed:", error);
             setAdded(!next);

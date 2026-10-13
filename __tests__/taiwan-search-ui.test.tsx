@@ -30,7 +30,7 @@ import { formatWatchlistPrice, formatWatchlistChange, isTaiwanWatchlistSymbol } 
 
 describe('SearchCommand UI logic and safeguards', () => {
     it('prevents earlier slow searches from overwriting newer search results (sequence guard)', async () => {
-        const guard = createSearchSequenceGuard<string[]>();
+        const guard = createSearchSequenceGuard();
 
         // User types '2' -> initiates request 1
         const seq1 = guard.next();

@@ -6,6 +6,7 @@ import {
     TaiwanSourceError,
     type HistoryUnit,
     type SyncSummary,
+    type TaiwanBar,
     type TaiwanHistoryStatus,
     type TaiwanKey,
     type TaiwanRepository,
