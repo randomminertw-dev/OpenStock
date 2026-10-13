@@ -2,6 +2,7 @@
 
 import { getCandlesWithReason } from './finnhub.actions';
 import { binanceCandles, binanceIntervalCandles, taiwanCandles } from '../candles/providers';
+import { officialTaiwanCandles } from '../taiwan/candles';
 import { candleMarket } from '../candles/symbols';
 import { CandleRequestError, createCandleCache, failure, fetchCandleJson, normalizeCandles } from '../candles/shared';
 import type { CandleFailureReason, CandleResult, CandleSource, RawCandles as CandleArrays } from '../candles/types';
@@ -114,7 +115,12 @@ export async function getDailyCandlesWithReason(symbol: string, days = 400): Pro
     switch (market.kind) {
         case 'unsupported': return failure('unsupported-symbol');
         case 'binance': return binanceCandles(market.symbol, days);
-        case 'taiwan': return taiwanCandles(market.symbol, days);
+        case 'taiwan': {
+            if (process.env.TAIWAN_CANDLE_PROVIDER === 'finmind') {
+                return taiwanCandles(market.symbol, days);
+            }
+            return officialTaiwanCandles(symbol, days);
+        }
         case 'coingecko': {
             const resolved = await resolveCryptoPair(market.symbol);
             if (!resolved.pair) return failure(resolved.reason ?? 'unsupported-symbol');

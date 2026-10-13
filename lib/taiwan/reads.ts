@@ -19,8 +19,16 @@ export function setTaiwanRepositoryForTesting(repo: TaiwanRepository | null): vo
     testRepository = repo;
 }
 
-function getRepo(injected?: TaiwanRepository): TaiwanRepository {
+export function getTaiwanTestRepository(): TaiwanRepository | null {
+    return testRepository;
+}
+
+export function getTaiwanRepository(injected?: TaiwanRepository): TaiwanRepository {
     return injected ?? testRepository ?? createMongoTaiwanRepository();
+}
+
+function getRepo(injected?: TaiwanRepository): TaiwanRepository {
+    return getTaiwanRepository(injected);
 }
 
 /**

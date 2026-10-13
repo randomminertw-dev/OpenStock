@@ -12,7 +12,7 @@ export type RawCandles = {
 
 export type CandleFailureReason = 'missing-config' | 'unsupported-symbol' | 'api-error' | 'no-data';
 export type CandleSource = {
-    provider: 'alpaca' | 'binance' | 'finmind' | 'finnhub';
+    provider: 'alpaca' | 'binance' | 'finmind' | 'finnhub' | 'twse' | 'tpex';
     symbol: string;
     timeZone: string;
     priceBasis?: 'unadjusted';

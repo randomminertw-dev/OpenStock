@@ -247,7 +247,7 @@ export default async function IndicatorDashboard({ symbol }: { symbol: string })
     })() : null;
 
     const { results, ids, asof, source } = assessment ?? {};
-    const sourceNames = { alpaca: 'Alpaca', binance: 'Binance', finmind: 'FinMind', finnhub: 'Finnhub' };
+    const sourceNames = { alpaca: 'Alpaca', binance: 'Binance', finmind: 'FinMind', finnhub: 'Finnhub', twse: 'TWSE', tpex: 'TPEx' };
     const dataDate = asof ? new Date(asof).toLocaleDateString('sv-SE', { timeZone: source?.timeZone ?? 'UTC' }) : null;
 
     return (

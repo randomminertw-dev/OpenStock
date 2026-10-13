@@ -1,6 +1,7 @@
 import React, { type ReactNode, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { TaiwanBar, TaiwanSecurity } from '@/lib/taiwan/types';
 
 vi.mock('@/lib/actions/finnhub.actions', () => ({
     getCandlesWithReason: vi.fn().mockResolvedValue({ candles: null, reason: 'api-error', source: null }),
@@ -27,6 +28,48 @@ function rows(count = 270) {
         const c = 100 + i * 0.2 + Math.sin(i) * 3;
         return { t, o: c - 1, h: c + 2, l: c - 2, c, v: 1000 + i * 10 };
     });
+}
+async function setupTaiwanBars(count = 270, volumeModifier?: (i: number) => number | undefined) {
+    const { createInMemoryTaiwanRepository } = await import('@/lib/taiwan/repository');
+    const { setTaiwanRepositoryForTesting } = await import('@/lib/taiwan/reads');
+    const repo = createInMemoryTaiwanRepository();
+    setTaiwanRepositoryForTesting(repo);
+    const sec: TaiwanSecurity = {
+        exchange: 'TWSE',
+        code: '2330',
+        symbol: 'TWSE:2330',
+        name: '台積電',
+        kind: 'stock',
+        currency: 'TWD',
+        listingDate: '1994-09-05',
+        status: 'active',
+        metadata: {},
+        source: 'twse',
+        asof: '2026-10-13',
+    };
+    await repo.writeCatalog([sec]);
+    const values = rows(count);
+    const bars: TaiwanBar[] = values.map((r, i) => {
+        const v = volumeModifier ? volumeModifier(i) : r.v;
+        return {
+            exchange: 'TWSE',
+            code: '2330',
+            tradingDate: new Date(r.t).toISOString().slice(0, 10),
+            t: r.t,
+            o: r.o,
+            h: r.h,
+            l: r.l,
+            c: r.c,
+            v: v === undefined ? (undefined as unknown as number) : v,
+            change: null,
+            complete: true,
+            source: 'twse',
+            priceBasis: 'unadjusted',
+            fetchedAt: new Date(r.t).toISOString(),
+        };
+    });
+    await repo.writeBars(bars);
+    return repo;
 }
 function marketFetch(count = 270) {
     return vi.fn(async (input: string) => {
@@ -58,18 +101,26 @@ async function resolveServerTree(node: ReactNode): Promise<ReactNode> {
     return React.cloneElement(element, undefined, await resolveServerTree(element.props.children));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
     vi.resetModules();
     vi.stubGlobal('React', React);
     vi.stubEnv('ALPACA_API_KEY', 'test-key');
     vi.stubEnv('ALPACA_API_SECRET', 'test-secret');
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-13T02:00:00Z'));
+    await setupTaiwanBars(270);
 });
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
+afterEach(async () => {
+    const { setTaiwanRepositoryForTesting } = await import('@/lib/taiwan/reads');
+    setTaiwanRepositoryForTesting(null);
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+});
 
 describe('indicator assessments across markets', () => {
     it.each(['all', 'last'] as const)('does not cast volume votes when %s volume data is missing', async (missing) => {
+        await setupTaiwanBars(270, (i) => (missing === 'all' || i === 269 ? undefined : 1000 + i * 10));
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ status: 200, data: rows().map((r, i) => ({
             date: new Date(r.t).toISOString().slice(0, 10), stock_id: '2330',
             open: r.o, max: r.h, min: r.l, close: r.c,
@@ -108,6 +159,7 @@ describe('indicator assessments across markets', () => {
     });
 
     it.each([59, 60])('handles the %s candle boundary with an accurate count', async (count) => {
+        await setupTaiwanBars(count);
         vi.stubGlobal('fetch', marketFetch(count));
         const { getIndicatorAssessmentWithReason } = await import('@/lib/actions/indicators.actions');
         const result = await getIndicatorAssessmentWithReason('2330.TW');
@@ -116,6 +168,7 @@ describe('indicator assessments across markets', () => {
     });
 
     it('keeps 57 votes gated at 60 bars while returning independently calculable factors at 59', async () => {
+        await setupTaiwanBars(59);
         vi.stubGlobal('fetch', marketFetch(59));
         const { getIndicatorAssessmentWithReason, getFourFactorAssessmentWithReason, getPeriodAssessment } = await import('@/lib/actions/indicators.actions');
         const preference = { version: 2, market: 'taiwan', preset: 'short', periods: { T: 5, M: 7, V: 7, R: 7 }, interval: null };
@@ -125,7 +178,7 @@ describe('indicator assessments across markets', () => {
             getPeriodAssessment('2330.TW'),
         ]);
         expect(vote).toMatchObject({ assessment: null, reason: 'insufficient-data', candleCount: 59 });
-        expect(factor).toMatchObject({ reason: null, candleCount: 59, assessment: { interval: '1d', source: { provider: 'finmind' } } });
+        expect(factor).toMatchObject({ reason: null, candleCount: 59, assessment: { interval: '1d', source: { provider: 'twse' } } });
         expect(factor.assessment?.factors.M.score).not.toBeNull();
         expect(factor.assessment?.factors.R.score).toBeNull();
         expect(factor.assessment?.idsFactor.validCount).toBeGreaterThan(0);
@@ -305,6 +358,7 @@ describe('rendered stock details', () => {
     });
 
     it('keeps factors visible when 59 bars cannot produce the 57-vote assessment', async () => {
+        await setupTaiwanBars(59);
         vi.stubGlobal('fetch', marketFetch(59));
         const { default: Dashboard } = await import('@/components/stocks/IndicatorDashboard');
         const html = renderToStaticMarkup(await resolveServerTree(await Dashboard({ symbol: '2330.TW' })));
@@ -335,10 +389,25 @@ describe('rendered stock details', () => {
             expect(html).toContain('目前套用：');
         }
         // Four factors request 800 days independently from the 400-day vote/variant cache.
-        expect(fetcher.mock.calls.filter(([url]) => url.includes('/klines') || url.includes('TaiwanStockPrice'))).toHaveLength(symbol.startsWith('CG:') ? 0 : 2);
+        expect(fetcher.mock.calls.filter(([url]) => url.includes('/klines') || url.includes('TaiwanStockPrice'))).toHaveLength(symbol.startsWith('BINANCE:') ? 2 : 0);
     });
 
     it('explains neutral, non-directional and unavailable IDS-Period results separately', async () => {
+        const { createInMemoryTaiwanRepository } = await import('@/lib/taiwan/repository');
+        const { setTaiwanRepositoryForTesting } = await import('@/lib/taiwan/reads');
+        const repo = createInMemoryTaiwanRepository();
+        setTaiwanRepositoryForTesting(repo);
+        await repo.writeCatalog([{
+            exchange: 'TWSE', code: '2330', symbol: 'TWSE:2330', name: '台積電',
+            kind: 'stock', currency: 'TWD', listingDate: '1994-09-05', status: 'active',
+            metadata: {}, source: 'twse', asof: '2026-10-13',
+        }]);
+        await repo.writeBars(rows(270).map(r => ({
+            exchange: 'TWSE', code: '2330', tradingDate: new Date(r.t).toISOString().slice(0, 10),
+            t: r.t, o: 100, h: 101, l: 99, c: 100, v: undefined as unknown as number,
+            change: 0, complete: true, source: 'twse', priceBasis: 'unadjusted',
+            fetchedAt: new Date(r.t).toISOString(),
+        })));
         vi.stubGlobal('fetch', vi.fn(async (input: string) => {
             const url = new URL(input);
             if (url.hostname !== 'api.finmindtrade.com') return json({}, 404);

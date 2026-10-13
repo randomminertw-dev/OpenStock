@@ -274,10 +274,61 @@ describe('market-aware daily candles', () => {
         expect(fallback).not.toHaveBeenCalled();
     });
 
+    it('routes Taiwan daily candles to official provider by default', async () => {
+        const { createInMemoryTaiwanRepository } = await import('@/lib/taiwan/repository');
+        const { setTaiwanRepositoryForTesting } = await import('@/lib/taiwan/reads');
+        const repo = createInMemoryTaiwanRepository();
+        setTaiwanRepositoryForTesting(repo);
+        try {
+            await repo.writeCatalog([
+                {
+                    exchange: 'TWSE', code: '2330', symbol: 'TWSE:2330', name: '台積電',
+                    kind: 'stock', currency: 'TWD', listingDate: '1994-09-05', status: 'active',
+                    metadata: {}, source: 'twse', asof: '2026-10-13',
+                },
+                {
+                    exchange: 'TPEX', code: '6488', symbol: 'TPEX:6488', name: '環球晶',
+                    kind: 'stock', currency: 'TWD', listingDate: '2015-09-25', status: 'active',
+                    metadata: {}, source: 'tpex', asof: '2026-10-13',
+                },
+            ]);
+            await repo.writeBars([
+                {
+                    exchange: 'TWSE', code: '2330', tradingDate: '2026-10-12',
+                    t: Date.parse('2026-10-12T00:00:00+08:00'), o: 100, h: 105, l: 98, c: 103,
+                    v: 5000000, change: 3, complete: true, source: 'twse',
+                    priceBasis: 'unadjusted', fetchedAt: new Date().toISOString(),
+                },
+                {
+                    exchange: 'TPEX', code: '6488', tradingDate: '2026-10-12',
+                    t: Date.parse('2026-10-12T00:00:00+08:00'), o: 80, h: 85, l: 79, c: 84,
+                    v: 2000000, change: 4, complete: true, source: 'tpex',
+                    priceBasis: 'unadjusted', fetchedAt: new Date().toISOString(),
+                },
+            ]);
+            const { getDailyCandlesWithReason } = await import('./alpaca.actions');
+            const twseRes = await getDailyCandlesWithReason('2330.TW');
+            expect(twseRes).toMatchObject({
+                reason: null,
+                source: { provider: 'twse', symbol: '2330', timeZone: 'Asia/Taipei', priceBasis: 'unadjusted' },
+                candles: { c: [103], v: [5000000] },
+            });
+            const tpexRes = await getDailyCandlesWithReason('6488.TWO');
+            expect(tpexRes).toMatchObject({
+                reason: null,
+                source: { provider: 'tpex', symbol: '6488', timeZone: 'Asia/Taipei', priceBasis: 'unadjusted' },
+                candles: { c: [84], v: [2000000] },
+            });
+        } finally {
+            setTaiwanRepositoryForTesting(null);
+        }
+    });
+
     it.each([
         ['2330.TW', '2330'], ['TWSE:2330', '2330'],
         ['6488.TWO', '6488'], ['TPEX:6488', '6488'], ['0050.TW', '0050'],
-    ])('loads %s from Taiwan daily data while preserving its stock ID', async (symbol, stockId) => {
+    ])('loads %s from Taiwan daily data through legacy FinMind when configured', async (symbol, stockId) => {
+        vi.stubEnv('TAIWAN_CANDLE_PROVIDER', 'finmind');
         const fetcher = vi.fn(async (url: string) => url.startsWith('https://api.finmindtrade.com/api/v4/data')
             ? response({ status: 200, msg: 'success', data: [{ ...FINMIND_ROW, stock_id: stockId }] })
             : response({}, 400));
@@ -289,6 +340,7 @@ describe('market-aware daily candles', () => {
     });
 
     it('does not require Alpaca credentials for Binance or FinMind', async () => {
+        vi.stubEnv('TAIWAN_CANDLE_PROVIDER', 'finmind');
         vi.stubEnv('ALPACA_API_KEY', '');
         vi.stubEnv('ALPACA_API_SECRET', '');
         vi.stubGlobal('fetch', vi.fn(async (url: string) => response(url.includes('binance')
@@ -344,12 +396,14 @@ describe('market-aware daily candles', () => {
     });
 
     it('classifies timeouts as API errors rather than short history', async () => {
+        vi.stubEnv('TAIWAN_CANDLE_PROVIDER', 'finmind');
         vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new DOMException('timeout', 'TimeoutError')));
         const { getDailyCandlesWithReason } = await import('./alpaca.actions');
         expect(await getDailyCandlesWithReason('2330.TW')).toMatchObject({ candles: null, reason: 'api-error' });
     });
 
     it('sends optional FinMind token in headers, with Taipei date boundaries', async () => {
+        vi.stubEnv('TAIWAN_CANDLE_PROVIDER', 'finmind');
         vi.stubEnv('FINMIND_API_TOKEN', 'private-test-token');
         vi.setSystemTime(new Date('2026-10-12T18:00:00Z'));
         const fetcher = vi.fn().mockResolvedValue(response({ status: 200, data: [FINMIND_ROW] }));
@@ -365,12 +419,14 @@ describe('market-aware daily candles', () => {
     });
 
     it('rejects FinMind payload errors even when HTTP is 200', async () => {
+        vi.stubEnv('TAIWAN_CANDLE_PROVIDER', 'finmind');
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ status: 401, msg: 'invalid token', data: [] })));
         const { getDailyCandlesWithReason } = await import('./alpaca.actions');
         expect(await getDailyCandlesWithReason('2330.TW')).toMatchObject({ candles: null, reason: 'missing-config' });
     });
 
     it('filters invalid Taiwan dates and missing prices without inventing candles', async () => {
+        vi.stubEnv('TAIWAN_CANDLE_PROVIDER', 'finmind');
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ status: 200, data: [
             FINMIND_ROW, { ...FINMIND_ROW, date: '2026-02-30' },
             { ...FINMIND_ROW, date: '2026-10-08', open: null },

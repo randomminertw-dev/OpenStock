@@ -1,7 +1,10 @@
 import { isInternationalSymbol } from '@/lib/utils';
+import type { TaiwanExchange } from '@/lib/taiwan/types';
+import { parseTaiwanKey, TAIWAN_CODE_REGEX } from '@/lib/taiwan/symbols';
 
 export type CandleMarket =
-    | { kind: 'binance' | 'coingecko' | 'taiwan' | 'us' | 'international'; symbol: string }
+    | { kind: 'taiwan'; symbol: string; exchange?: TaiwanExchange }
+    | { kind: 'binance' | 'coingecko' | 'us' | 'international'; symbol: string }
     | { kind: 'unsupported'; symbol: string };
 
 export function candleMarket(value: string): CandleMarket {
@@ -14,9 +17,13 @@ export function candleMarket(value: string): CandleMarket {
         const id = symbol.slice(3).toLowerCase();
         return { kind: /^[a-z0-9_-]+$/.test(id) ? 'coingecko' : 'unsupported', symbol: id };
     }
-    const taiwan = symbol.match(/^(?:TWSE:|TPEX:)([0-9][A-Z0-9]{3,7})$/)
-        ?? symbol.match(/^([0-9][A-Z0-9]{3,7})\.(?:TW|TWO)$/);
-    if (taiwan) return { kind: 'taiwan', symbol: taiwan[1] };
+    const twKey = parseTaiwanKey(symbol);
+    if (twKey) {
+        return { kind: 'taiwan', symbol: twKey.code, exchange: twKey.exchange };
+    }
+    if (TAIWAN_CODE_REGEX.test(symbol)) {
+        return { kind: 'taiwan', symbol };
+    }
     if (!symbol || symbol.length > 80 || !/^[A-Z0-9.:_-]+$/.test(symbol)) return { kind: 'unsupported', symbol };
     const us = symbol.replace(/^(?:NASDAQ|NYSE|AMEX):/, '');
     if (us.includes(':') || isInternationalSymbol(us)) return { kind: 'international', symbol: us };
