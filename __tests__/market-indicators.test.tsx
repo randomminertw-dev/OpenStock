@@ -313,6 +313,37 @@ describe('rendered stock details', () => {
         const retried = { assessment: null, reason: 'no-data' as const, candleCount: 0 };
         expect(await runFactorUpdate(preference, null, vi.fn().mockResolvedValue(retried))).toMatchObject({ saved: false, error: null, response: retried });
     });
+
+    it('keeps saved status and a retry path when assessment resolves api-error', async () => {
+        const { runFactorUpdate, factorFeedback, isRetryableFactorFailure } = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const preference = defaultFactorPreference('us');
+        const failure = { assessment: null, reason: 'api-error' as const, candleCount: 0 };
+        const save = vi.fn().mockResolvedValue(preference);
+        const first = await runFactorUpdate(preference, save, vi.fn().mockResolvedValue(failure));
+        expect(first).toMatchObject({ saved: true, error: null, response: failure });
+        expect(isRetryableFactorFailure(first)).toBe(true);
+        expect(factorFeedback('saved', '四因素行情服務暫時無法使用')).toContain('已儲存');
+        expect(factorFeedback('saved', '四因素行情服務暫時無法使用')).toContain('四因素行情服務暫時無法使用');
+        expect(save).toHaveBeenCalledOnce();
+    });
+
+    it('retains saved status and refresh retry across repeated rejections without saving again', async () => {
+        const { runFactorUpdate, factorFeedback, isRetryableFactorFailure } = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const preference = defaultFactorPreference('crypto');
+        const save = vi.fn().mockResolvedValue(preference);
+        const refresh = vi.fn().mockRejectedValue(new Error('offline'));
+        const first = await runFactorUpdate(preference, save, refresh);
+        const second = await runFactorUpdate(first.preference, null, refresh);
+        expect(first).toMatchObject({ saved: true, error: 'refresh' });
+        expect(second).toMatchObject({ saved: false, error: 'refresh' });
+        expect(isRetryableFactorFailure(first)).toBe(true);
+        expect(isRetryableFactorFailure(second)).toBe(true);
+        expect(factorFeedback('saved', '評分更新仍失敗')).toContain('已儲存');
+        expect(refresh).toHaveBeenCalledTimes(2);
+        expect(save).toHaveBeenCalledOnce();
+    });
 });
 
 // Browser acceptance cases (require a signed-in local app and live providers):

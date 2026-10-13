@@ -12,6 +12,21 @@ type FactorResponse = {
     reason: AssessmentFailureReason | null;
     candleCount: number;
 };
+type FactorStatus = 'idle' | 'preview' | 'saved' | 'error';
+type FactorUpdateResult = { preference: FactorPreference; saved: boolean; response: FactorResponse | null; error: 'save' | 'refresh' | null };
+
+export function isRetryableFactorFailure(result: FactorUpdateResult): boolean {
+    if (result.error === 'refresh') return true;
+    return result.error === null && result.response?.assessment === null &&
+        result.response.reason !== 'invalid-preference' && result.response.reason !== 'unsupported-symbol';
+}
+
+export function factorFeedback(status: FactorStatus, message: string): string {
+    const saved = '已儲存；同市場其他標的會沿用此偏好。';
+    const preview = '暫時預覽：只套用於目前頁面，尚未儲存。';
+    const prefix = status === 'saved' ? saved : status === 'preview' ? preview : '';
+    return prefix ? `${prefix}${message ? ` ${message}` : ''}` : message;
+}
 
 /** 編輯請求進行中時保留提交時的草稿快照。 */
 export function editFactorDraft(current: FactorPreference, next: FactorPreference, busy: boolean): FactorPreference {
@@ -23,7 +38,7 @@ export async function runFactorUpdate(
     preference: FactorPreference,
     save: ((value: FactorPreference) => Promise<FactorPreference>) | null,
     refresh: (value: FactorPreference) => Promise<FactorResponse>,
-): Promise<{ preference: FactorPreference; saved: boolean; response: FactorResponse | null; error: 'save' | 'refresh' | null }> {
+): Promise<FactorUpdateResult> {
     let applied = preference;
     if (save) {
         try {
@@ -63,7 +78,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
 }) {
     const [draft, setDraft] = useState<FactorPreference | null>(initialPreference);
     const [shown, setShown] = useState(initialResponse);
-    const [status, setStatus] = useState<'idle' | 'preview' | 'saved' | 'error'>(initialSaved ? 'saved' : 'idle');
+    const [status, setStatus] = useState<FactorStatus>(initialSaved ? 'saved' : 'idle');
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
     const [readWarning, setReadWarning] = useState(readError);
@@ -123,10 +138,10 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
             setStatus(save ? 'saved' : 'preview');
             if (outcome.error === 'refresh') {
                 setRetryPreference(outcome.preference);
-                setMessage(save ? '已儲存，但評分更新失敗。請按「重新整理評分」重試。' : '預覽評分更新失敗。請按「重新整理評分」重試。');
+                setMessage(save ? '評分更新失敗。請按「重新整理評分」重試。' : '預覽評分更新失敗。請按「重新整理評分」重試。');
                 return;
             }
-            setRetryPreference(null);
+            setRetryPreference(isRetryableFactorFailure(outcome) ? outcome.preference : null);
             if (outcome.response) {
                 setShown(outcome.response);
                 if (outcome.response.reason) setMessage(FAILURE[outcome.response.reason]);
@@ -150,7 +165,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
             }
             if (outcome.response) {
                 setShown(outcome.response);
-                setRetryPreference(null);
+                setRetryPreference(isRetryableFactorFailure(outcome) ? outcome.preference : null);
                 setMessage(outcome.response.reason ? FAILURE[outcome.response.reason] : '評分已更新。');
             }
         } catch {
@@ -214,7 +229,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
                         <button type="button" disabled={busy} onClick={() => apply(true)} className="min-h-11 w-full rounded-lg bg-gold px-3 text-[13px] font-bold text-background transition-opacity hover:opacity-90 disabled:opacity-50">儲存市場偏好</button>
                     </div>
                     <p role="status" aria-live="polite" className="mt-2 min-h-5 text-[11.5px] text-faint">
-                        {status === 'saved' ? message || '已儲存；同市場其他標的會沿用此偏好。' : status === 'preview' ? message || '暫時預覽：只套用於目前頁面，尚未儲存。' : message}
+                        {factorFeedback(status, message)}
                     </p>
                     {retryPreference && <button type="button" disabled={busy} onClick={retryAssessment} className="mb-2 min-h-11 w-full rounded-lg border border-line px-3 text-[13px] font-bold text-foreground hover:bg-hover/50 disabled:opacity-50">重新整理評分</button>}
                     {readWarning && <p className="mt-1 text-[11.5px] text-warn">偏好讀取失敗，暫以現行預設顯示；儲存前請確認設定。</p>}
