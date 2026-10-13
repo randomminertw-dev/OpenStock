@@ -13,6 +13,7 @@
  * R 的歷史分位只用 t 當下已存在的資料（不含未來資料）。
  */
 import type { Candle } from './types';
+import type { FactorPeriods } from './factor-periods';
 import { wilderSmooth } from './math';
 
 /** 四因素代號。 */
@@ -29,6 +30,8 @@ export interface FactorScore {
   formulaVersion: string;
   /** 繁體中文說明。 */
   reason: string;
+  /** R 分位計算實際採用的有效 ATR% 樣本數。 */
+  sampleCount?: number;
 }
 
 /** computeFactors 的回傳型別。 */
@@ -65,8 +68,12 @@ function nullScore(
   id: FactorId,
   n: number,
   reason: string,
+  sampleCount?: number,
 ): FactorScore {
-  return { id, score: null, n, formulaVersion: FORMULA_VERSION, reason };
+  return {
+    id, score: null, n, formulaVersion: FORMULA_VERSION, reason,
+    ...(sampleCount === undefined ? {} : { sampleCount }),
+  };
 }
 
 /**
@@ -282,13 +289,14 @@ function computeV(candles: Candle[], n: number): FactorScore {
 function computeR(candles: Candle[], n: number): FactorScore {
   const len = candles.length;
   if (!validPeriod(n)) {
-    return nullScore('R', n, `計算期間 n=${n} 無效，R 無法計算`);
+    return nullScore('R', n, `計算期間 n=${n} 無效，R 無法計算`, 0);
   }
   if (len < n + 1) {
     return nullScore(
       'R',
       n,
       `資料不足：R（ATR%）需要至少 ${n + 1} 根 K 線，目前 ${len} 根`,
+      0,
     );
   }
   const tr: number[] = [];
@@ -310,6 +318,7 @@ function computeR(candles: Candle[], n: number): FactorScore {
       n,
       `資料不足：R 需要至少 ${R_MIN_HISTORY} 筆 ATR% 歷史` +
         `（截至 t 當下已存在 ${window.length} 筆）`,
+      window.length,
     );
   }
   const current = window[window.length - 1];
@@ -317,6 +326,7 @@ function computeR(candles: Candle[], n: number): FactorScore {
   const score = 100 * pct;
   return {
     id: 'R',
+    sampleCount: window.length,
     score,
     n,
     formulaVersion: FORMULA_VERSION,
@@ -335,12 +345,15 @@ function computeR(candles: Candle[], n: number): FactorScore {
  */
 export function computeFactors(
   candles: Candle[],
-  n: number = DEFAULT_N,
+  periods: number | FactorPeriods = DEFAULT_N,
 ): FourFactors {
+  const ns = typeof periods === 'number'
+    ? { T: periods, M: periods, V: periods, R: periods }
+    : periods;
   return {
-    T: computeT(candles, n),
-    M: computeM(candles, n),
-    V: computeV(candles, n),
-    R: computeR(candles, n),
+    T: computeT(candles, ns.T),
+    M: computeM(candles, ns.M),
+    V: computeV(candles, ns.V),
+    R: computeR(candles, ns.R),
   };
 }

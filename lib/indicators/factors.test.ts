@@ -84,6 +84,29 @@ describe('computeFactors — brief 逐字斷言', () => {
 });
 
 describe('computeFactors — 邊界', () => {
+  it('uses each independent N without changing single-period formulas', () => {
+    const candles = makeRSI70();
+    const periods = { T: 7, M: 21, V: 10, R: 14 };
+    const actual = computeFactors(candles, periods);
+    for (const id of ['T', 'M', 'V', 'R'] as const) {
+      expect(actual[id]).toEqual(computeFactors(candles, periods[id])[id]);
+      expect(actual[id].n).toBe(periods[id]);
+    }
+    expect(computeFactors(candles)).toEqual(computeFactors(candles, 14));
+  });
+
+  it('exposes the actual R percentile sample count including warmup and cap', () => {
+    for (const [length, sampleCount] of [[10, 0], [50, 36], [139, 125], [140, 126], [300, 252]]) {
+      const { R } = computeFactors(makeFlat(length));
+      expect(R.sampleCount).toBe(sampleCount);
+      expect(R.score === null).toBe(sampleCount < 126);
+    }
+    const candles = makeFlat(150);
+    candles[149].c = 0;
+    expect(computeFactors(candles).R.sampleCount).toBe(135);
+    expect(computeFactors(makeFlat(150)).R.reason).toContain('136');
+  });
+
   it('T：+DI 與 −DI 皆為 0（全平盤）→ 分母為零 → score=null', () => {
     const { T } = computeFactors(makeFlat(40));
     expect(T.score).toBeNull();
