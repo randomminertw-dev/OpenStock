@@ -1,0 +1,44 @@
+[
+  {
+    "Date": "1151008",
+    "Code": "00400A",
+    "Name": "主動國泰動能高息",
+    "Exdividend": "息",
+    "StockDividendRatio": "",
+    "SubscriptionRatio": "",
+    "SubscriptionPricePerShare": "",
+    "CashDividend": "0.120000",
+    "SharesOffered": "",
+    "SharesEmpOwner": "",
+    "SharesholderOwner": "",
+    "StockHoldingRatio": ""
+  },
+  {
+    "Date": "1150915",
+    "Code": "2330",
+    "Name": "台積電",
+    "Exdividend": "息",
+    "StockDividendRatio": "",
+    "SubscriptionRatio": "",
+    "SubscriptionPricePerShare": "",
+    "CashDividend": "4.000000",
+    "SharesOffered": "",
+    "SharesEmpOwner": "",
+    "SharesholderOwner": "",
+    "StockHoldingRatio": ""
+  },
+  {
+    "Date": "1150820",
+    "Code": "2330",
+    "Name": "台積電",
+    "Exdividend": "減資/分割",
+    "StockDividendRatio": "",
+    "SubscriptionRatio": "",
+    "SubscriptionPricePerShare": "",
+    "CashDividend": "",
+    "SharesOffered": "",
+    "SharesEmpOwner": "",
+    "SharesholderOwner": "",
+    "StockHoldingRatio": ""
+  }
+]

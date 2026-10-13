@@ -73,7 +73,7 @@ export type TaiwanDetails = {
 
 export type TaiwanRequester = (url: string, init?: RequestInit) => Promise<unknown>;
 
-export type { TaiwanDatasetBundle, TaiwanDatasetId } from './datasets';
+export type { TaiwanCatalogInput, TaiwanDatasetBundle, TaiwanDatasetId } from './datasets';
 
 export class TaiwanSourceError extends Error {
     constructor(

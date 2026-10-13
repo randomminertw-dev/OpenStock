@@ -86,7 +86,78 @@ export const TAIWAN_DATASETS = {
         url: 'https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule',
         method: 'GET',
     },
+    'twse-revenue': {
+        id: 'twse-revenue',
+        exchange: 'TWSE',
+        name: '上市公司每月營業收入彙總表',
+        url: 'https://openapi.twse.com.tw/v1/opendata/t187ap05_L',
+        method: 'GET',
+    },
+    'tpex-revenue': {
+        id: 'tpex-revenue',
+        exchange: 'TPEX',
+        name: '上櫃公司每月營業收入彙總表',
+        url: 'https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap05_O',
+        method: 'GET',
+    },
+    'twse-eps': {
+        id: 'twse-eps',
+        exchange: 'TWSE',
+        name: '上市公司各產業EPS統計資訊',
+        url: 'https://openapi.twse.com.tw/v1/opendata/t187ap14_L',
+        method: 'GET',
+    },
+    'tpex-eps': {
+        id: 'tpex-eps',
+        exchange: 'TPEX',
+        name: '上櫃公司各產業EPS統計資訊',
+        url: 'https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap14_O',
+        method: 'GET',
+    },
+    'twse-announcements': {
+        id: 'twse-announcements',
+        exchange: 'TWSE',
+        name: '上市公司每日重大訊息',
+        url: 'https://openapi.twse.com.tw/v1/opendata/t187ap04_L',
+        method: 'GET',
+    },
+    'tpex-announcements': {
+        id: 'tpex-announcements',
+        exchange: 'TPEX',
+        name: '上櫃公司每日重大訊息',
+        url: 'https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap04_O',
+        method: 'GET',
+    },
+    'twse-financials-ci': {
+        id: 'twse-financials-ci',
+        exchange: 'TWSE',
+        name: '上市公司綜合損益表(一般業)',
+        url: 'https://openapi.twse.com.tw/v1/opendata/t187ap06_L_ci',
+        method: 'GET',
+    },
+    'tpex-financials-ci': {
+        id: 'tpex-financials-ci',
+        exchange: 'TPEX',
+        name: '上櫃公司綜合損益表(一般業)',
+        url: 'https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap06_O_ci',
+        method: 'GET',
+    },
+    'twse-balance-ci': {
+        id: 'twse-balance-ci',
+        exchange: 'TWSE',
+        name: '上市公司資產負債表(一般業)',
+        url: 'https://openapi.twse.com.tw/v1/opendata/t187ap07_L_ci',
+        method: 'GET',
+    },
+    'tpex-balance-ci': {
+        id: 'tpex-balance-ci',
+        exchange: 'TPEX',
+        name: '上櫃公司資產負債表(一般業)',
+        url: 'https://www.tpex.org.tw/openapi/v1/mopsfin_t187ap07_O_ci',
+        method: 'GET',
+    },
 } as const;
 
 export type TaiwanDatasetId = keyof typeof TAIWAN_DATASETS;
 export type TaiwanDatasetBundle = Partial<Record<TaiwanDatasetId, unknown>>;
+export type TaiwanCatalogInput = TaiwanDatasetBundle;

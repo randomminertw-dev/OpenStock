@@ -1,0 +1,29 @@
+{
+  "status": "success",
+  "data": [
+    {
+      "stockNo": "00679B",
+      "stockName": "元大美債20年",
+      "listingDate": "20170117",
+      "issuer": "元大投信",
+      "issuerLink": "https://www.yuantaetfs.com/",
+      "indexName": "ICE美國政府20+年期債券指數"
+    },
+    {
+      "stockNo": "00687C",
+      "stockName": "國泰20年美債+櫃U(美元)",
+      "listingDate": "20180110",
+      "issuer": "國泰投信",
+      "issuerLink": "https://www.cathaysite.com.tw/",
+      "indexName": "彭博20年期(以上)美國公債指數"
+    },
+    {
+      "stockNo": "00411A",
+      "stockName": "主動統一前沿科技",
+      "listingDate": "20260826",
+      "issuer": "統一投信",
+      "issuerLink": "https://www.ezmoney.com.tw/",
+      "indexName": ""
+    }
+  ]
+}

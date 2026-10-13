@@ -1,0 +1,26 @@
+[
+  {
+    "Date": "1151013",
+    "SecuritiesCompanyCode": "6488",
+    "CompanyName": "環球晶圓股份有限公司",
+    "CompanyAbbreviation": "環球晶",
+    "Registration": "－ ",
+    "SecuritiesIndustryCode": "24",
+    "DateOfListing": "20150925",
+    "ParValueOfCommonStock": "新台幣                 10.0000元",
+    "Paidin.Capital.NTDollars": "4372500000",
+    "WebAddress": "https://www.sas-globalwafers.com/"
+  },
+  {
+    "Date": "1151013",
+    "SecuritiesCompanyCode": "1240",
+    "CompanyName": "茂生農經股份有限公司",
+    "CompanyAbbreviation": "茂生農經",
+    "Registration": "－ ",
+    "SecuritiesIndustryCode": "33",
+    "DateOfListing": "20180808",
+    "ParValueOfCommonStock": "新台幣                 10.0000元",
+    "Paidin.Capital.NTDollars": "464439920",
+    "WebAddress": "https://www.morn-sun.com.tw/"
+  }
+]
