@@ -237,7 +237,7 @@ export default async function IndicatorDashboard({ symbol }: { symbol: string })
             )}
             <FactorSettings key={symbol} symbol={symbol} initialPreference={preferenceResult?.preference ?? null}
                 initialResponse={factorResponse} readError={preferenceResult?.readError ?? false}
-                initialSaved={preferenceResult?.saved ?? false} />
+                initialSaved={preferenceResult?.saved ?? false} migrationRequired={preferenceResult?.migrationRequired ?? false} />
             {(ids || periodAssessment) && <MultiLevelIds ids={ids ?? null} idsPeriod={periodAssessment?.idsPeriod ?? null} />}
             {periodAssessment && (
                 <>

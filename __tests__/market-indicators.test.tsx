@@ -342,15 +342,45 @@ describe('rendered stock details', () => {
         expect(html).toContain('text-[16px]');
     });
 
-    it('keeps international factors fixed at daily n14 without settings', async () => {
+    it('renders the signed ATR-multiple trend and its actual SMA/ATR windows', async () => {
+        const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const html = renderToStaticMarkup(<FactorSettings symbol="AAPL"
+            initialPreference={defaultFactorPreference('us')}
+            initialResponse={factorResponse(21)} readError={false} initialSaved={false} />);
+        expect(html).toContain('波動率標準化均線乖離');
+        expect(html).toContain('SMA50');
+        expect(html).toContain('SMA200');
+        expect(html).toContain('ATR21');
+        expect(html).toContain('+21.0');
+        expect(html).toContain('倍 ATR');
+        expect(html).toContain('T5');
+        expect(html).toContain('T21');
+        expect(html).toContain('T42');
+        expect(html).toContain('min-h-11');
+    });
+
+    it('warns that migrated trend preferences remain unsaved until explicit confirmation', async () => {
+        const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
+        const { presetFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const html = renderToStaticMarkup(<FactorSettings symbol="TWSE:2330"
+            initialPreference={presetFactorPreference('taiwan', 'long')}
+            initialResponse={{ assessment: null, reason: 'no-data', candleCount: 0 }}
+            readError={false} initialSaved={false} migrationRequired />);
+        expect(html).toContain('需確認並重新儲存');
+        expect(html).toContain('未儲存');
+        expect(html).toContain('T42 / M126 / V126 / R126');
+    });
+
+    it('keeps international factors fixed at daily T21 and M/V/R14 without settings', async () => {
         const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
         const html = renderToStaticMarkup(<FactorSettings symbol="VOD.L" initialPreference={null}
             initialResponse={{ assessment: null, reason: 'no-data', candleCount: 0 }} readError={false} initialSaved={false} />);
-        expect(html).toContain('國際市場沿用固定日 K、四因素 n=14');
+        expect(html).toContain('國際市場沿用固定日 K：T21，M/V/R14');
         expect(html).not.toContain('儲存市場偏好');
     });
 
-    it('marks a stored legacy n14 preference as saved on first render', async () => {
+    it('marks a stored version 2 legacy preference as saved on first render', async () => {
         const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
         const { defaultFactorPreference } = await import('@/lib/indicators/factor-periods');
         const html = renderToStaticMarkup(<FactorSettings symbol="AAPL" initialPreference={defaultFactorPreference('us')}
@@ -373,7 +403,7 @@ describe('rendered stock details', () => {
         expect(visibleText).toContain('N 是所選週期的 K 線根數');
         expect(visibleText).toContain('長線技術觀察');
         expect(visibleText).toContain('不含多年基本面');
-        expect(visibleText).toContain(interval === '4h' ? '約20小時' : coverage);
+        expect(visibleText).toContain({ '4h': '約8天', '8h': '約16天', '12h': '約24天', '1d': '約48天' }[interval]);
         expect(visibleText).toContain(coverage);
         expect(visibleText.match(/約\d+(?:天|小時)(?:\d+小時)?/g)?.length).toBeGreaterThanOrEqual(4);
     });

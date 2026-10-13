@@ -1,10 +1,11 @@
 import { TrendingUp, Minus, Zap, BarChart3, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FactorId, FactorScore, FourFactors } from '@/lib/indicators/factors';
+import { trendWindows } from '@/lib/indicators/factors';
 import type { FourFactorAssessment } from '@/lib/actions/indicators.actions';
 
 const FACTOR_META: Record<FactorId, { name: string; hint: string; Icon: typeof TrendingUp }> = {
-    T: { name: '趨勢', hint: '趨勢強度與方向', Icon: TrendingUp },
+    T: { name: '趨勢', hint: '波動率標準化均線乖離（Volatility-Adjusted Moving Average Spread）', Icon: TrendingUp },
     M: { name: '動能', hint: '動能強度與方向', Icon: Zap },
     V: { name: '量能', hint: '資金流入強度', Icon: BarChart3 },
     R: { name: '波動風險', hint: '風險強度，不代表方向', Icon: ShieldAlert },
@@ -50,9 +51,15 @@ function FactorCard({ factor }: { factor: FactorScore }) {
             <p className={cn('num mt-1.5 text-[26px] font-bold leading-none', scoreClass)}>
                 {/* R 為 [0,100] 的強度分數，不帶正負號（無方向性） */}
                 {missing ? 'N/A' : isRisk ? Math.abs(factor.score!).toFixed(1) : fmtScore(factor.score!)}
+                {factor.id === 'T' && !missing && <span className="ml-1 text-[12px] font-semibold">倍 ATR</span>}
             </p>
 
             <p className="mt-1 text-[11px] leading-relaxed text-faint">{meta.hint}</p>
+            {factor.id === 'T' && Number.isInteger(factor.n) && factor.n > 0 && (
+                <p className="num mt-1 text-[10.5px] leading-relaxed text-faint">
+                    SMA{trendWindows(factor.n).short} − SMA{trendWindows(factor.n).long} · ATR{factor.n}
+                </p>
+            )}
 
             {missing ? (
                 <p className="mt-1.5 text-[11.5px] leading-relaxed text-faint">{factor.reason}</p>
@@ -84,7 +91,7 @@ export default function FactorCards({ factors, assessment }: { factors: FourFact
             </div>
 
             <p className="mt-2 text-[11.5px] leading-relaxed text-faint">
-                標準化技術分數，非預測機率。T / M / V 正值偏多、負值偏空；R 是相對該標的自身歷史波動的分位（0–100），不代表方向。
+                T 是帶方向的均線差（倍 ATR，不設 ±100 上限）；M / V 為標準化分數。正值偏多、負值偏空；R 是相對該標的自身歷史波動的分位（0–100），不代表方向，皆非預測機率。
             </p>
             {assessment && (
                 <p className="num mt-1 text-[11px] leading-relaxed text-faint">

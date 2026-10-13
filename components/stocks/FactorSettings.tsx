@@ -5,6 +5,7 @@ import { getFourFactorAssessmentWithReason, type AssessmentFailureReason, type F
 import { saveFactorPreference } from '@/lib/actions/factor-preferences.actions';
 import { cryptoCoverage, parseFactorPreference, presetFactorPreference, withCryptoInterval, type CryptoInterval, type FactorPreference } from '@/lib/indicators/factor-periods';
 import type { FactorId } from '@/lib/indicators/factors';
+import { trendWindows } from '@/lib/indicators/factors';
 import FactorCards from './FactorCards';
 
 type FactorResponse = {
@@ -79,12 +80,13 @@ const FAILURE: Record<AssessmentFailureReason, string> = {
     'insufficient-data': '四因素歷史資料不足。',
 };
 
-export default function FactorSettings({ symbol, initialPreference, initialResponse, readError, initialSaved }: {
+export default function FactorSettings({ symbol, initialPreference, initialResponse, readError, initialSaved, migrationRequired = false }: {
     symbol: string;
     initialPreference: FactorPreference | null;
     initialResponse: FactorResponse;
     readError: boolean;
     initialSaved: boolean;
+    migrationRequired?: boolean;
 }) {
     const [draft, setDraft] = useState<FactorPreference | null>(initialPreference);
     const [display, setDisplay] = useState<FactorDisplay>({ applied: initialPreference, appliedSaved: initialSaved, shown: initialResponse });
@@ -93,6 +95,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
     const [readWarning, setReadWarning] = useState(readError);
+    const [needsMigration, setNeedsMigration] = useState(migrationRequired);
     const [retryPreference, setRetryPreference] = useState<FactorPreference | null>(null);
     const requestId = useRef(0);
     const max = draft?.market === 'crypto' ? 180 : 126;
@@ -145,6 +148,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
                 return;
             }
             if (outcome.saved) setReadWarning(false);
+            if (outcome.saved) setNeedsMigration(false);
             setDraft(outcome.preference);
             setStatus(save ? 'saved' : 'preview');
             if (outcome.error === 'refresh') {
@@ -190,7 +194,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
 
     return (
         <section className="border-t border-line" aria-label="四因素設定與評分">
-            {!draft && <p className="px-3 pt-3 text-[11.5px] text-faint">國際市場沿用固定日 K、四因素 n=14。</p>}
+            {!draft && <p className="px-3 pt-3 text-[11.5px] text-faint">國際市場沿用固定日 K：T21，M/V/R14。</p>}
             {draft && (
                 <div className="px-3 pt-3">
                     <div className="flex flex-wrap items-baseline justify-between gap-1.5">
@@ -199,7 +203,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
                     </div>
                     <p className="mt-1 text-[11.5px] leading-relaxed text-faint">
                         {draft.preset === 'legacy' && draft.interval === (draft.market === 'crypto' ? '1d' : null)
-                            ? '現行預設：四因素皆 n=14，crypto 使用 1d。'
+                            ? '現行預設：趨勢 ATR N=21，其餘三因素 N=14；crypto 使用 1d。'
                             : '選擇預設或分別調整四個因素；預覽只影響目前頁面。'}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-relaxed text-faint">
@@ -211,23 +215,28 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
                             const n = draft.market === 'crypto'
                                 ? { short: 10, medium: 30, long: 180 }[preset]
                                 : { short: 7, medium: 21, long: 126 }[preset];
+                            const trendN = { short: 5, medium: 21, long: 42 }[preset];
                             return <button key={preset} type="button" disabled={busy} onClick={() => selectPreset(preset)}
                                 aria-pressed={draft.preset === preset}
-                                className={`min-h-11 rounded-lg border px-1 py-2 text-[12px] font-bold transition-colors ${draft.preset === preset ? 'border-gold bg-gold/15 text-gold' : 'border-line text-faint hover:bg-hover/50 hover:text-foreground'}`}>
-                                {({ short: '短線', medium: '中線', long: '長線技術觀察' } as const)[preset]} <span className="num">{n}</span>
+                                className={`min-h-11 rounded-lg border px-1 py-2 text-[11px] font-bold leading-tight transition-colors ${draft.preset === preset ? 'border-gold bg-gold/15 text-gold' : 'border-line text-faint hover:bg-hover/50 hover:text-foreground'}`}>
+                                <span className="block">{({ short: '短線', medium: '中線', long: '長線技術觀察' } as const)[preset]}</span>
+                                <span className="num mt-1 block">T{trendN} · M/V/R{n}</span>
                             </button>;
                         })}
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                         {FACTORS.map(({ id, label }) => <label key={id} className="min-w-0 text-[11px] font-semibold text-faint">
-                            <span className="mb-1 block">{label} · N</span>
-                            <input type="number" inputMode="numeric" min={5} max={max} step={1} disabled={busy} value={Number.isNaN(draft.periods[id]) ? '' : draft.periods[id]}
+                            <span className="mb-1 block">{label} · {id === 'T' ? 'ATR N' : 'N'}</span>
+                            <input type="number" inputMode="numeric" min={5} max={id === 'T' ? 50 : max} step={1} disabled={busy} value={Number.isNaN(draft.periods[id]) ? '' : draft.periods[id]}
                                 onChange={event => updatePeriod(id, event.target.value)}
                                 className="num h-11 w-full min-w-0 rounded-lg border border-line bg-card px-3 text-[16px] font-semibold text-foreground focus:border-gold focus:outline-none" />
-                            {draft.market === 'crypto' && draft.interval && <span className="mt-1 block text-[10.5px] font-normal text-faint">{cryptoCoverage(draft.periods[id], draft.interval)}</span>}
+                            {id === 'T' && Number.isInteger(draft.periods.T) && draft.periods.T >= 5 && draft.periods.T <= 50 &&
+                                <span className="mt-1 block text-[10.5px] font-normal leading-snug text-faint">SMA{trendWindows(draft.periods.T).short} / SMA{trendWindows(draft.periods.T).long} / ATR{draft.periods.T}
+                                    {draft.market === 'crypto' && draft.interval && ` · 長均線${cryptoCoverage(trendWindows(draft.periods.T).long, draft.interval)}`}</span>}
+                            {id !== 'T' && draft.market === 'crypto' && draft.interval && <span className="mt-1 block text-[10.5px] font-normal text-faint">{cryptoCoverage(draft.periods[id], draft.interval)}</span>}
                         </label>)}
                     </div>
-                    <p className="mt-1 text-[11px] text-faint">N 可設 5–{max}，需為整數。</p>
+                    <p className="mt-1 text-[11px] text-faint">趨勢 ATR N 可設 5–50；M/V/R N 可設 5–{max}，皆需為整數。</p>
                     {draft.market === 'crypto' && <p className="mt-1 text-[11px] leading-relaxed text-faint">N 是所選週期的 K 線根數；切換週期不改 N，約略涵蓋時間會跟著變。長線技術觀察不含多年基本面。</p>}
                     {draft.market === 'crypto' && (
                         <div className="mt-3">
@@ -250,6 +259,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
                     </p>
                     {retryPreference && <button type="button" disabled={busy} onClick={retryAssessment} className="mb-2 min-h-11 w-full rounded-lg border border-line px-3 text-[13px] font-bold text-foreground hover:bg-hover/50 disabled:opacity-50">重新整理評分</button>}
                     {readWarning && <p className="mt-1 text-[11.5px] text-warn">偏好讀取失敗，暫以現行預設顯示；儲存前請確認設定。</p>}
+                    {needsMigration && <p role="alert" className="mt-1 text-[11.5px] leading-relaxed text-warn">舊版趨勢偏好已轉為新公式；M/V/R 與 K 線週期保持不變。此設定需確認並重新儲存，才會成為帳號預設。</p>}
                 </div>
             )}
             {shown.assessment ? (
