@@ -8,13 +8,16 @@ import { hasFinnhubQuotes } from '@/lib/markets';
 import { getSession } from '@/lib/better-auth/auth';
 import { CandleRequestError, createCandleCache, failure, normalizeCandles } from '../candles/shared';
 import type { CandleResult, CandleSource } from '../candles/types';
+import { getTaiwanQuote, getTaiwanSecurity, searchTaiwanSecurities } from '@/lib/taiwan/reads';
+import { parseTaiwanKey } from '@/lib/taiwan/symbols';
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 // Key pool: each free key has its own 60 req/min, so N keys = N x the quota. Rotated per request.
-const FINNHUB_KEYS = (process.env.FINNHUB_API_KEYS || process.env.NEXT_PUBLIC_FINNHUB_API_KEY || process.env.FINNHUB_API_KEY || '')
-    .split(',')
-    .map((k) => k.trim())
-    .filter(Boolean);
+const getFinnhubKeys = () =>
+    (process.env.FINNHUB_API_KEYS || process.env.NEXT_PUBLIC_FINNHUB_API_KEY || process.env.FINNHUB_API_KEY || '')
+        .split(',')
+        .map((k) => k.trim())
+        .filter(Boolean);
 let nextKeyIndex = 0;
 const FETCH_TIMEOUT_MS = 5000;
 // Finnhub stalls bursts of parallel requests from one key (measured: 4 at once -> most hang),
@@ -72,7 +75,8 @@ const inFlight = new Map<string, Promise<unknown>>();
 const responseCache = new Map<string, { value: unknown; freshUntil: number; failed?: boolean }>();
 
 async function withSlot<T>(run: () => Promise<T>): Promise<T> {
-    if (activeRequests >= MAX_IN_FLIGHT_PER_KEY * Math.max(1, FINNHUB_KEYS.length)) await new Promise<void>((resolve) => waitingForSlot.push(resolve));
+    const keys = getFinnhubKeys();
+    if (activeRequests >= MAX_IN_FLIGHT_PER_KEY * Math.max(1, keys.length)) await new Promise<void>((resolve) => waitingForSlot.push(resolve));
     activeRequests++;
     try {
         return await run();
@@ -85,10 +89,11 @@ async function withSlot<T>(run: () => Promise<T>): Promise<T> {
 // The token travels in a header, so cache keys are the same whichever key served them.
 // On 429 the next key in the pool gets a turn.
 async function fetchWithKeyPool(url: string, ttl: number) {
-    if (FINNHUB_KEYS.length === 0) throw new Error('No Finnhub API key configured (FINNHUB_API_KEYS)');
+    const keys = getFinnhubKeys();
+    if (keys.length === 0) throw new Error('No Finnhub API key configured (FINNHUB_API_KEYS)');
     let res: Response | null = null;
-    for (let attempt = 0; attempt < FINNHUB_KEYS.length; attempt++) {
-        const key = FINNHUB_KEYS[nextKeyIndex++ % FINNHUB_KEYS.length];
+    for (let attempt = 0; attempt < keys.length; attempt++) {
+        const key = keys[nextKeyIndex++ % keys.length];
         res = await fetch(url, {
             headers: { 'X-Finnhub-Token': key },
             // Without a timeout a stalled Finnhub socket holds the page for Node's 300s default
@@ -200,6 +205,45 @@ export async function getWatchlistData(symbols: string[]) {
 
     // Fetch quotes and profiles in parallel
     const promises = symbols.map(async (sym) => {
+        const upper = sym.toUpperCase();
+        const isTw =
+            upper.startsWith('TWSE:') ||
+            upper.startsWith('TPEX:') ||
+            upper.endsWith('.TW') ||
+            upper.endsWith('.TWO') ||
+            parseTaiwanKey(upper) !== null;
+
+        if (isTw) {
+            const [twQuote, twSec] = await Promise.all([
+                getTaiwanQuote(sym),
+                getTaiwanSecurity(sym),
+            ]);
+
+            const price = twQuote?.price ?? null;
+            const change = twQuote?.change ?? null;
+            const changePercent = twQuote?.changePercent ?? null;
+            const currency = twQuote?.currency ?? twSec?.currency ?? null;
+            const name = twSec?.name || sym;
+            const source = twQuote?.source ?? (twSec?.exchange === 'TPEX' ? 'tpex' : 'twse');
+            const tradingDate = twQuote?.tradingDate ?? null;
+            const mode = 'close' as const;
+
+            return {
+                symbol: sym,
+                price,
+                change,
+                changePercent,
+                currency,
+                name,
+                logo: undefined,
+                marketCap: undefined,
+                peRatio: 0,
+                source,
+                tradingDate,
+                mode,
+            };
+        }
+
         const covered = hasFinnhubQuotes(sym);
         const [quote, profile] = covered
             ? await Promise.all([getQuote(sym, LIVE_QUOTE_TTL), getCompanyProfile(sym)])
@@ -237,7 +281,7 @@ const candleResponseCache = createCandleCache();
 /** Preserve source failures for the candle router; legacy callers still receive null. */
 export async function getCandlesWithReason(symbol: string, resolution = 'D', days = 120): Promise<CandleResult> {
     const source: CandleSource = { provider: 'finnhub', symbol, timeZone: 'UTC' };
-    if (FINNHUB_KEYS.length === 0) return failure('missing-config', source);
+    if (getFinnhubKeys().length === 0) return failure('missing-config', source);
     return candleResponseCache.get(`finnhub:${symbol}:${resolution}:${days}`, source, () => withSlot(async () => {
         const to = Math.floor(Date.now() / 1000);
         const from = to - days * 86400;
@@ -265,7 +309,7 @@ export async function getCandles(symbol: string, resolution = 'D', days = 120) {
 export async function getNews(symbols?: string[]): Promise<MarketNewsArticle[]> {
     try {
         const range = getDateRange(5);
-        if (FINNHUB_KEYS.length === 0) {
+        if (getFinnhubKeys().length === 0) {
             throw new Error('FINNHUB API key is not configured');
         }
         const cleanSymbols = (symbols || [])
@@ -339,53 +383,94 @@ export async function getNews(symbols?: string[]): Promise<MarketNewsArticle[]> 
 
 export const searchStocks = cache(async (query?: string): Promise<StockWithWatchlistStatus[]> => {
     try {
-        if (FINNHUB_KEYS.length === 0) {
-            // If no token, log and return empty to avoid throwing per requirements
-            console.error('Error in stock search:', new Error('FINNHUB API key is not configured'));
-            return [];
-        }
-
         const trimmed = typeof query === 'string' ? query.trim() : '';
-
-        let results: SearchStockCandidate[] = [];
 
         if (!trimmed) {
             // Shown in the palette on every page, so no API calls: Finnhub's free tier is 60 req/min
-            results = POPULAR_STOCKS.map(({ symbol, name, exchange }) => ({
+            const popular = POPULAR_STOCKS.map(({ symbol, name, exchange }) => ({
                 symbol,
                 description: name,
                 displaySymbol: symbol,
                 type: 'Common Stock',
                 __exchange: exchange,
             }));
-        } else {
-            // A public server action: only signed-in users may spend Finnhub quota on searches
-            if (!(await getSession())?.user) return [];
-            const url = `${FINNHUB_BASE_URL}/search?q=${encodeURIComponent(trimmed)}`;
-            const data = await fetchJSON<FinnhubSearchResponse>(url, 1800);
-            results = Array.isArray(data?.result) ? data.result : [];
+            return popular.map((r) => ({
+                symbol: (r.symbol || '').toUpperCase(),
+                name: r.description || (r.symbol || '').toUpperCase(),
+                exchange: getExchangeLabel((r.symbol || '').toUpperCase(), r.__exchange),
+                type: r.type || 'Stock',
+                isInWatchlist: false,
+            })).slice(0, 15);
         }
 
-        const mapped: StockWithWatchlistStatus[] = results
-            .map((r) => {
-                const upper = (r.symbol || '').toUpperCase();
-                const name = r.description || upper;
-                const exchangeFromProfile = r.__exchange;
-                const exchange = getExchangeLabel(upper, exchangeFromProfile);
-                const type = r.type || 'Stock';
-                const item: StockWithWatchlistStatus = {
-                    symbol: upper,
-                    name,
-                    exchange,
-                    type,
-                    isInWatchlist: false,
-                };
-                return item;
-            })
-            .slice(0, 15);
+        // A public server action: only signed-in users may spend quota on searches
+        if (!(await getSession())?.user) return [];
 
-        return mapped;
+        const isBareCode = /^[0-9][A-Z0-9]{3,7}$/i.test(trimmed);
+        const hasChinese = /[\u4e00-\u9fa5]/.test(trimmed);
+        const explicitTaiwan = parseTaiwanKey(trimmed) !== null;
+        const isTaiwanLikely = isBareCode || hasChinese || explicitTaiwan;
+
+        // Search Taiwan securities from official catalog/repo BEFORE checking FINNHUB_KEYS
+        let taiwanResults: StockWithWatchlistStatus[] = [];
+        let taiwanError: unknown = null;
+        try {
+            taiwanResults = await searchTaiwanSecurities(trimmed);
+        } catch (err) {
+            taiwanError = err;
+        }
+
+        // If specifically a Taiwan query and DB failed: do not trigger external API and do not declare "no products"
+        if (isTaiwanLikely && taiwanError) {
+            throw taiwanError;
+        }
+
+        // Bare numbers, Chinese, or explicit Taiwan queries should NOT be sent as US stock search
+        if (isTaiwanLikely) {
+            return taiwanResults.slice(0, 15);
+        }
+
+        // Non-Taiwan queries: proceed with Finnhub search if keys exist
+        const finnhubKeys = getFinnhubKeys();
+        if (finnhubKeys.length === 0) {
+            return taiwanResults.slice(0, 15);
+        }
+
+        const url = `${FINNHUB_BASE_URL}/search?q=${encodeURIComponent(trimmed)}`;
+        const data = await fetchJSON<FinnhubSearchResponse>(url, 1800);
+        const results: SearchStockCandidate[] = Array.isArray(data?.result) ? data.result : [];
+
+        const finnhubMapped: StockWithWatchlistStatus[] = results.map((r) => {
+            const upper = (r.symbol || '').toUpperCase();
+            const name = r.description || upper;
+            const exchangeFromProfile = r.__exchange;
+            const exchange = getExchangeLabel(upper, exchangeFromProfile);
+            const type = r.type || 'Stock';
+            return {
+                symbol: upper,
+                name,
+                exchange,
+                type,
+                isInWatchlist: false,
+            };
+        });
+
+        // Merge Taiwan results with Finnhub results, deduplicate by symbol, max 15 items
+        const seen = new Set<string>();
+        const combined: StockWithWatchlistStatus[] = [];
+        for (const item of [...taiwanResults, ...finnhubMapped]) {
+            const sym = item.symbol.toUpperCase();
+            if (!seen.has(sym)) {
+                seen.add(sym);
+                combined.push(item);
+            }
+        }
+
+        return combined.slice(0, 15);
     } catch (err) {
+        if (err instanceof Error && err.message.startsWith('台股資料庫準備中或同步未啟用')) {
+            throw err;
+        }
         console.error('Error in stock search:', err);
         return [];
     }

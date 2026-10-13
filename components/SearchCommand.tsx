@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { CommandDialog, CommandEmpty, CommandInput, CommandList } from "@/components/ui/command"
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -16,11 +16,40 @@ export const SearchButton = ({ children, className }: { children: React.ReactNod
     <button type="button" onClick={openSearch} className={className}>{children}</button>
 );
 
+/**
+ * Creates a sequence guard to ensure slow earlier searches do not overwrite newer results.
+ */
+export function createSearchSequenceGuard() {
+    let currentSeq = 0;
+    return {
+        next: () => ++currentSeq,
+        isLatest: (seq: number) => seq === currentSeq,
+        current: () => currentSeq,
+    };
+}
+
+/**
+ * Detects whether an event is in IME composition (e.g. typing Zhuyin/Pinyin candidate).
+ */
+export function isImeComposing(event: {
+    isComposing?: boolean;
+    nativeEvent?: { isComposing?: boolean };
+    keyCode?: number;
+}): boolean {
+    if (event.isComposing) return true;
+    if (event.nativeEvent?.isComposing) return true;
+    if (event.keyCode === 229) return true;
+    return false;
+}
+
 export default function SearchCommand({ initialStocks }: { initialStocks: StockWithWatchlistStatus[] }) {
     const [open, setOpen] = useState(false)
     const [searchTerm, setSearchTerm] = useState("")
     const [loading, setLoading] = useState(false)
     const [stocks, setStocks] = useState<StockWithWatchlistStatus[]>(initialStocks);
+    const searchSeqRef = useRef(0);
+    const isComposingRef = useRef(false);
+
     // The palette starts closed, so render it only after hydration (avoids Radix id mismatches)
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
@@ -45,18 +74,25 @@ export default function SearchCommand({ initialStocks }: { initialStocks: StockW
     }, [])
 
     const handleSearch = async () => {
-        if(!isSearchMode) return setStocks(initialStocks);
+        if (!isSearchMode) return setStocks(initialStocks);
 
-        setLoading(true)
+        const seq = ++searchSeqRef.current;
+        setLoading(true);
         try {
             const results = await searchStocks(searchTerm.trim());
-            setStocks(results);
+            if (seq === searchSeqRef.current) {
+                setStocks(results);
+            }
         } catch {
-            setStocks([])
+            if (seq === searchSeqRef.current) {
+                setStocks([]);
+            }
         } finally {
-            setLoading(false)
+            if (seq === searchSeqRef.current) {
+                setLoading(false);
+            }
         }
-    }
+    };
 
     const debouncedSearch = useDebounce(handleSearch, 300);
 
@@ -75,7 +111,24 @@ export default function SearchCommand({ initialStocks }: { initialStocks: StockW
     return (
         <CommandDialog open={open} onOpenChange={setOpen} className="search-dialog">
             <div className="search-field">
-                <CommandInput value={searchTerm} onValueChange={setSearchTerm} placeholder="Search by company or symbol" className="search-input" />
+                <CommandInput
+                    value={searchTerm}
+                    onValueChange={setSearchTerm}
+                    onCompositionStart={() => {
+                        isComposingRef.current = true;
+                    }}
+                    onCompositionEnd={() => {
+                        isComposingRef.current = false;
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (isComposingRef.current || isImeComposing(e))) {
+                            // IME confirmation enter should not trigger navigation
+                            e.stopPropagation();
+                        }
+                    }}
+                    placeholder="Search by company or symbol"
+                    className="search-input"
+                />
                 {loading && <Loader2 className="search-loader" />}
             </div>
             <CommandList className="search-list">
