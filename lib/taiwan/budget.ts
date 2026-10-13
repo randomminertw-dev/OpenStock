@@ -133,6 +133,8 @@ export function createBudgetedRequest(
 
                         if (attempt < maxRetries) {
                             attempt++;
+                            const minInterval = config.minIntervalMs ?? 2000;
+                            await new Promise(resolve => setTimeout(resolve, minInterval));
                             continue;
                         }
 

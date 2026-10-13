@@ -73,13 +73,19 @@ export function createInMemoryTaiwanRepository(): TaiwanRepository {
                     if (existing.complete && !incoming.complete) {
                         continue;
                     }
-                    if (existing.fetchedAt > incoming.fetchedAt && existing.complete) {
+                    if (
+                        existing.fetchedAt > incoming.fetchedAt &&
+                        (existing.complete || !incoming.complete)
+                    ) {
                         continue;
                     }
                     bars.set(barKey, {
                         ...incoming,
-                        complete: existing.complete ? true : incoming.complete,
-                        fetchedAt: existing.complete && !incoming.complete ? existing.fetchedAt : incoming.fetchedAt,
+                        complete: existing.complete || incoming.complete,
+                        fetchedAt:
+                            existing.fetchedAt > incoming.fetchedAt
+                                ? existing.fetchedAt
+                                : incoming.fetchedAt,
                     });
                 } else {
                     bars.set(barKey, { ...incoming });
@@ -269,33 +275,142 @@ export function createMongoTaiwanRepository(): TaiwanRepository {
 
         async writeBars(bars: TaiwanBar[]): Promise<void> {
             await ensureDb();
-            for (const bar of bars) {
-                const filter = {
-                    exchange: bar.exchange,
-                    code: bar.code,
-                    tradingDate: bar.tradingDate,
-                    priceBasis: bar.priceBasis,
-                };
-                const existing = await TaiwanBarModel.findOne(filter).lean();
-                if (existing) {
-                    if (existing.complete && !bar.complete) {
-                        continue;
-                    }
-                    if (existing.fetchedAt > bar.fetchedAt && existing.complete) {
-                        continue;
-                    }
-                    await TaiwanBarModel.updateOne(filter, {
-                        $set: {
+            if (bars.length === 0) return;
+
+            const BATCH_SIZE = 500;
+            for (let i = 0; i < bars.length; i += BATCH_SIZE) {
+                const chunk = bars.slice(i, i + BATCH_SIZE);
+
+                // Deduplicate within chunk in-memory first
+                const chunkMap = new Map<string, TaiwanBar>();
+                for (const bar of chunk) {
+                    const key = `${bar.exchange}:${bar.code}:${bar.tradingDate}:${bar.priceBasis}`;
+                    const existingInChunk = chunkMap.get(key);
+                    if (existingInChunk) {
+                        if (existingInChunk.complete && !bar.complete) {
+                            continue;
+                        }
+                        if (
+                            existingInChunk.fetchedAt > bar.fetchedAt &&
+                            (existingInChunk.complete || !bar.complete)
+                        ) {
+                            continue;
+                        }
+                        chunkMap.set(key, {
                             ...bar,
-                            complete: existing.complete ? true : bar.complete,
+                            complete: existingInChunk.complete || bar.complete,
                             fetchedAt:
-                                existing.complete && !bar.complete
-                                    ? existing.fetchedAt
+                                existingInChunk.fetchedAt > bar.fetchedAt
+                                    ? existingInChunk.fetchedAt
                                     : bar.fetchedAt,
-                        },
-                    });
+                        });
+                    } else {
+                        chunkMap.set(key, bar);
+                    }
+                }
+
+                const deduplicatedChunk = Array.from(chunkMap.values());
+                const uniqueDates = Array.from(new Set(deduplicatedChunk.map(b => b.tradingDate)));
+                const uniqueSecs = Array.from(
+                    new Set(deduplicatedChunk.map(b => `${b.exchange}:${b.code}`))
+                );
+
+                let queryFilter: Record<string, unknown>;
+                if (uniqueSecs.length === 1) {
+                    const [exchange, code] = uniqueSecs[0].split(':');
+                    queryFilter = {
+                        exchange,
+                        code,
+                        tradingDate: { $in: uniqueDates },
+                    };
                 } else {
-                    await TaiwanBarModel.create(bar);
+                    queryFilter = {
+                        tradingDate: { $in: uniqueDates },
+                        $or: deduplicatedChunk.map(b => ({
+                            exchange: b.exchange,
+                            code: b.code,
+                            priceBasis: b.priceBasis,
+                        })),
+                    };
+                }
+
+                const existingDocs = await TaiwanBarModel.find(queryFilter).lean();
+                const existingMap = new Map<string, TaiwanBar>();
+                for (const doc of existingDocs) {
+                    const k = `${doc.exchange}:${doc.code}:${doc.tradingDate}:${doc.priceBasis}`;
+                    existingMap.set(k, doc as unknown as TaiwanBar);
+                }
+
+                const ops = [];
+                for (const bar of deduplicatedChunk) {
+                    const key = `${bar.exchange}:${bar.code}:${bar.tradingDate}:${bar.priceBasis}`;
+                    const existing = existingMap.get(key);
+                    if (existing) {
+                        if (existing.complete && !bar.complete) {
+                            continue;
+                        }
+                        if (
+                            existing.fetchedAt > bar.fetchedAt &&
+                            (existing.complete || !bar.complete)
+                        ) {
+                            continue;
+                        }
+                        ops.push({
+                            updateOne: {
+                                filter: {
+                                    exchange: bar.exchange,
+                                    code: bar.code,
+                                    tradingDate: bar.tradingDate,
+                                    priceBasis: bar.priceBasis,
+                                },
+                                update: {
+                                    $set: {
+                                        ...bar,
+                                        complete: existing.complete || bar.complete,
+                                        fetchedAt:
+                                            existing.fetchedAt > bar.fetchedAt
+                                                ? existing.fetchedAt
+                                                : bar.fetchedAt,
+                                    },
+                                },
+                            },
+                        });
+                    } else {
+                        ops.push({
+                            updateOne: {
+                                filter: {
+                                    exchange: bar.exchange,
+                                    code: bar.code,
+                                    tradingDate: bar.tradingDate,
+                                    priceBasis: bar.priceBasis,
+                                },
+                                update: {
+                                    $set: bar,
+                                },
+                                upsert: true,
+                            },
+                        });
+                    }
+                }
+
+                if (ops.length > 0) {
+                    try {
+                        await TaiwanBarModel.bulkWrite(ops, { ordered: false });
+                    } catch (err: unknown) {
+                        const error = err as {
+                            code?: number;
+                            writeErrors?: Array<{ code?: number }>;
+                            message?: string;
+                        };
+                        const isE11000 =
+                            error.code === 11000 ||
+                            error.message?.includes('E11000') ||
+                            (Array.isArray(error.writeErrors) &&
+                                error.writeErrors.every(we => we.code === 11000));
+                        if (!isE11000) {
+                            throw err;
+                        }
+                    }
                 }
             }
         },
@@ -456,14 +571,43 @@ export function createMongoTaiwanRepository(): TaiwanRepository {
             await ensureDb();
             await TaiwanUsageModel.updateOne(
                 { day },
-                {
-                    $inc: {
-                        requests: amounts.requests,
-                        jobs: amounts.jobs,
-                        transferBytes: amounts.transferBytes,
-                        storageBytes: amounts.storageBytes,
+                [
+                    {
+                        $set: {
+                            requests: {
+                                $max: [
+                                    0,
+                                    { $add: [{ $ifNull: ['$requests', 0] }, amounts.requests] },
+                                ],
+                            },
+                            jobs: {
+                                $max: [0, { $add: [{ $ifNull: ['$jobs', 0] }, amounts.jobs] }],
+                            },
+                            transferBytes: {
+                                $max: [
+                                    0,
+                                    {
+                                        $add: [
+                                            { $ifNull: ['$transferBytes', 0] },
+                                            amounts.transferBytes,
+                                        ],
+                                    },
+                                ],
+                            },
+                            storageBytes: {
+                                $max: [
+                                    0,
+                                    {
+                                        $add: [
+                                            { $ifNull: ['$storageBytes', 0] },
+                                            amounts.storageBytes,
+                                        ],
+                                    },
+                                ],
+                            },
+                        },
                     },
-                }
+                ]
             );
         },
     };

@@ -192,6 +192,28 @@ describe('createBudgetedRequest', () => {
         expect(mockFetch).toHaveBeenCalledTimes(3); // Initial + 2 retries
     });
 
+    it('waits at least minIntervalMs before retrying on 429 or 5xx', async () => {
+        const repo = createInMemoryTaiwanRepository();
+        const retryIntervalConfig: TaiwanSyncConfig = {
+            ...testConfig,
+            minIntervalMs: 50,
+        };
+        const timestamps: number[] = [];
+        const mockFetch = vi.fn().mockImplementation(async () => {
+            timestamps.push(Date.now());
+            if (timestamps.length === 1) {
+                return new Response('Rate limited', { status: 429 });
+            }
+            return new Response('{"stat":"OK"}', { status: 200 });
+        });
+
+        const request = createBudgetedRequest(repo, retryIntervalConfig, mockFetch);
+        const res = await request('https://api.example.com/backoff-test');
+        expect(res).toEqual({ stat: 'OK' });
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(timestamps[1] - timestamps[0]).toBeGreaterThanOrEqual(40);
+    });
+
     it('does not retry on non-retryable 403 or 404 errors', async () => {
         const repo = createInMemoryTaiwanRepository();
         const mockFetch = vi

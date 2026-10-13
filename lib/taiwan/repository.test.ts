@@ -11,6 +11,10 @@ import { TaiwanDatasetModel } from '../../database/models/taiwan-dataset.model';
 import { TaiwanSyncModel } from '../../database/models/taiwan-sync.model';
 import { TaiwanUsageModel } from '../../database/models/taiwan-usage.model';
 
+vi.mock('@/database/mongoose', () => ({
+    connectToDatabase: vi.fn().mockResolvedValue({}),
+}));
+
 describe('TaiwanRepository (In-Memory)', () => {
     it('writes and reads bars, upserting duplicate day to a single corrected record', async () => {
         const repo = createInMemoryTaiwanRepository();
@@ -144,6 +148,51 @@ describe('TaiwanRepository (In-Memory)', () => {
         expect(bars).toHaveLength(1);
         expect(bars[0].complete).toBe(true);
         expect(bars[0].fetchedAt).toBe('2026-10-14T15:00:00.000Z');
+    });
+
+    it('rejects older incomplete bar over newer incomplete bar, but allows older complete bar to upgrade incomplete bar', async () => {
+        const repo = createInMemoryTaiwanRepository();
+        const baseBar: TaiwanBar = {
+            exchange: 'TWSE',
+            code: '2330',
+            tradingDate: '2026-10-14',
+            t: 1791964800000,
+            o: 1000,
+            h: 1010,
+            l: 995,
+            c: 1005,
+            v: 30000000,
+            change: 5,
+            complete: false,
+            source: 'twse',
+            priceBasis: 'unadjusted',
+            fetchedAt: '2026-10-14T14:30:00.000Z',
+        };
+        await repo.writeBars([baseBar]);
+
+        // 1. Older incomplete bar should be ignored
+        const olderIncompleteBar: TaiwanBar = {
+            ...baseBar,
+            c: 999,
+            complete: false,
+            fetchedAt: '2026-10-14T14:00:00.000Z',
+        };
+        await repo.writeBars([olderIncompleteBar]);
+        let bars = await repo.readBars({ exchange: 'TWSE', code: '2330' });
+        expect(bars[0].c).toBe(1005);
+        expect(bars[0].complete).toBe(false);
+
+        // 2. Older complete bar should upgrade complete status
+        const olderCompleteBar: TaiwanBar = {
+            ...baseBar,
+            c: 1002,
+            complete: true,
+            fetchedAt: '2026-10-14T14:00:00.000Z',
+        };
+        await repo.writeBars([olderCompleteBar]);
+        bars = await repo.readBars({ exchange: 'TWSE', code: '2330' });
+        expect(bars[0].complete).toBe(true);
+        expect(bars[0].fetchedAt).toBe('2026-10-14T14:30:00.000Z');
     });
 
     it('manages atomic job leases: single winner, non-owner release rejected, expired lease reclaimable', async () => {
@@ -359,5 +408,161 @@ describe('Mongoose Taiwan Models & Repository Config', () => {
             return fields.day === 1 && options?.unique === true;
         });
         expect(hasUsageUnique).toBe(true);
+    });
+
+    it('batches MongoDB writeBars into chunks of 500, uses $in filter, and executes bulkWrite with ordered: false', async () => {
+        process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
+        try {
+            const repo = createMongoTaiwanRepository();
+            // Generate 800 bars for the same security
+            const bars: TaiwanBar[] = Array.from({ length: 800 }, (_, i) => ({
+                exchange: 'TWSE',
+                code: '2330',
+                tradingDate: `2026-01-${String(i + 1).padStart(2, '0')}`,
+                t: 1767225600000 + i * 86400000,
+                o: 1000 + i,
+                h: 1000 + i,
+                l: 1000 + i,
+                c: 1000 + i,
+                v: 1000,
+                change: 0,
+                complete: true,
+                source: 'twse',
+                priceBasis: 'unadjusted',
+                fetchedAt: '2026-10-14T00:00:00.000Z',
+            }));
+
+            const findSpy = vi.spyOn(TaiwanBarModel, 'find').mockReturnValue({
+                lean: vi.fn().mockResolvedValue([]),
+            } as unknown as ReturnType<typeof TaiwanBarModel.find>);
+            const bulkWriteSpy = vi
+                .spyOn(TaiwanBarModel, 'bulkWrite')
+                .mockResolvedValue({} as unknown as Awaited<ReturnType<typeof TaiwanBarModel.bulkWrite>>);
+
+            await repo.writeBars(bars);
+
+            // 800 bars should be split into 2 chunks (500 and 300)
+            expect(findSpy).toHaveBeenCalledTimes(2);
+            expect(bulkWriteSpy).toHaveBeenCalledTimes(2);
+            expect(bulkWriteSpy).toHaveBeenCalledWith(
+                expect.any(Array),
+                { ordered: false }
+            );
+
+            // First call has 500 operations, second has 300
+            expect(bulkWriteSpy.mock.calls[0][0]).toHaveLength(500);
+            expect(bulkWriteSpy.mock.calls[1][0]).toHaveLength(300);
+
+            findSpy.mockRestore();
+            bulkWriteSpy.mockRestore();
+        } finally {
+            delete process.env.MONGODB_URI;
+        }
+    });
+
+    it('tolerates E11000 duplicate key error in MongoDB writeBars bulkWrite', async () => {
+        process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
+        try {
+            const repo = createMongoTaiwanRepository();
+            const bar: TaiwanBar = {
+                exchange: 'TWSE',
+                code: '2330',
+                tradingDate: '2026-10-14',
+                t: 1791964800000,
+                o: 1000,
+                h: 1000,
+                l: 1000,
+                c: 1000,
+                v: 1000,
+                change: 0,
+                complete: true,
+                source: 'twse',
+                priceBasis: 'unadjusted',
+                fetchedAt: '2026-10-14T00:00:00.000Z',
+            };
+
+            vi.spyOn(TaiwanBarModel, 'find').mockReturnValue({
+                lean: vi.fn().mockResolvedValue([]),
+            } as unknown as ReturnType<typeof TaiwanBarModel.find>);
+            const duplicateError = Object.assign(new Error('E11000 duplicate key error collection'), {
+                code: 11000,
+            });
+            const bulkWriteSpy = vi.spyOn(TaiwanBarModel, 'bulkWrite').mockRejectedValue(duplicateError);
+
+            // Should not throw because E11000 is tolerated
+            await expect(repo.writeBars([bar])).resolves.not.toThrow();
+
+            bulkWriteSpy.mockRestore();
+        } finally {
+            delete process.env.MONGODB_URI;
+        }
+    });
+
+    it('rethrows non-E11000 errors in MongoDB writeBars bulkWrite', async () => {
+        process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
+        try {
+            const repo = createMongoTaiwanRepository();
+            const bar: TaiwanBar = {
+                exchange: 'TWSE',
+                code: '2330',
+                tradingDate: '2026-10-14',
+                t: 1791964800000,
+                o: 1000,
+                h: 1000,
+                l: 1000,
+                c: 1000,
+                v: 1000,
+                change: 0,
+                complete: true,
+                source: 'twse',
+                priceBasis: 'unadjusted',
+                fetchedAt: '2026-10-14T00:00:00.000Z',
+            };
+
+            vi.spyOn(TaiwanBarModel, 'find').mockReturnValue({
+                lean: vi.fn().mockResolvedValue([]),
+            } as unknown as ReturnType<typeof TaiwanBarModel.find>);
+            const bulkWriteSpy = vi.spyOn(TaiwanBarModel, 'bulkWrite').mockRejectedValue(new Error('Connection lost'));
+
+            await expect(repo.writeBars([bar])).rejects.toThrow('Connection lost');
+
+            bulkWriteSpy.mockRestore();
+        } finally {
+            delete process.env.MONGODB_URI;
+        }
+    });
+
+    it('uses pipeline update with $max [0, ...] in MongoDB settleUsage', async () => {
+        process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
+        try {
+            const repo = createMongoTaiwanRepository();
+            const updateOneSpy = vi
+                .spyOn(TaiwanUsageModel, 'updateOne')
+                .mockResolvedValue({} as unknown as Awaited<ReturnType<typeof TaiwanUsageModel.updateOne>>);
+
+            await repo.settleUsage('2026-10-14', {
+                requests: 0,
+                jobs: 0,
+                transferBytes: -5000,
+                storageBytes: 0,
+            });
+
+            expect(updateOneSpy).toHaveBeenCalledWith(
+                { day: '2026-10-14' },
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        $set: expect.objectContaining({
+                            transferBytes: expect.objectContaining({
+                                $max: [0, expect.anything()],
+                            }),
+                        }),
+                    }),
+                ])
+            );
+
+            updateOneSpy.mockRestore();
+        } finally {
+            delete process.env.MONGODB_URI;
+        }
     });
 });
