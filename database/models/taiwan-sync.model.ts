@@ -1,5 +1,5 @@
 import { Schema, model, models, type Document, type Model } from 'mongoose';
-import type { TaiwanHistoryStatus } from '@/lib/taiwan/types';
+import type { TaiwanHistoryStatus } from '../../lib/taiwan/types';
 
 export interface ITaiwanSync extends Document {
     jobKey: string;

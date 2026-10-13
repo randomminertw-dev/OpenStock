@@ -1,5 +1,5 @@
 import { Schema, model, models, type Document, type Model } from 'mongoose';
-import type { TaiwanBar } from '@/lib/taiwan/types';
+import type { TaiwanBar } from '../../lib/taiwan/types';
 
 export interface ITaiwanBar extends Document, TaiwanBar {
     createdAt: Date;

@@ -1,9 +1,9 @@
-import { connectToDatabase } from '@/database/mongoose';
-import { TaiwanSecurityModel } from '@/database/models/taiwan-security.model';
-import { TaiwanBarModel } from '@/database/models/taiwan-bar.model';
-import { TaiwanDatasetModel } from '@/database/models/taiwan-dataset.model';
-import { TaiwanSyncModel } from '@/database/models/taiwan-sync.model';
-import { TaiwanUsageModel } from '@/database/models/taiwan-usage.model';
+import { connectToDatabase } from '../../database/mongoose';
+import { TaiwanSecurityModel } from '../../database/models/taiwan-security.model';
+import { TaiwanBarModel } from '../../database/models/taiwan-bar.model';
+import { TaiwanDatasetModel } from '../../database/models/taiwan-dataset.model';
+import { TaiwanSyncModel } from '../../database/models/taiwan-sync.model';
+import { TaiwanUsageModel } from '../../database/models/taiwan-usage.model';
 import {
     TaiwanSourceError,
     type TaiwanBar,

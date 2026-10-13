@@ -9,7 +9,9 @@
     "lint": "eslint",
     "test:db": "node scripts/test-db.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "taiwan:build-sync": "node scripts/build-taiwan-sync.mjs",
+    "taiwan:sync": "node scripts/sync-taiwan.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",

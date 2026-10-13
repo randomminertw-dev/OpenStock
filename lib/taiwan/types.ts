@@ -56,6 +56,19 @@ export type TaiwanHistory = {
     status: TaiwanHistoryStatus;
 };
 
+export type HistoryUnit = {
+    exchange: TaiwanExchange;
+    period: string;
+    keys: TaiwanKey[];
+};
+
+export type SyncSummary = {
+    requested: number;
+    written: number;
+    skipped: number;
+    failures: string[];
+};
+
 export type TaiwanEvent = {
     date: string;
     kind: 'dividend' | 'split' | 'capital-change';

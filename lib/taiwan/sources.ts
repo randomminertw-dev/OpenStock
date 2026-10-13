@@ -62,6 +62,7 @@ export async function fetchTaiwanDataset(
             entry.method === 'POST' ? { method: 'POST' } : undefined
         );
     } catch (err) {
+        if (err instanceof TaiwanSourceError) throw err;
         throw new TaiwanSourceError('api-error', err instanceof Error ? err.message : String(err));
     }
     return unwrapJson(raw);
@@ -104,6 +105,7 @@ async function fetchTwseHistory(
     try {
         response = await request(url);
     } catch (err) {
+        if (err instanceof TaiwanSourceError) throw err;
         throw new TaiwanSourceError('api-error', err instanceof Error ? err.message : String(err));
     }
 
@@ -230,6 +232,7 @@ async function fetchTpexDaily(
     try {
         response = await request(url);
     } catch (err) {
+        if (err instanceof TaiwanSourceError) throw err;
         throw new TaiwanSourceError('api-error', err instanceof Error ? err.message : String(err));
     }
 

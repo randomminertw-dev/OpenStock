@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const MONGODB_URI = process.env.MONGODB_URI;
 
 // FIX: Set Google DNS and force IPv4 to avoid querySrv ECONNREFUSED
-import dns from 'dns';
+import * as dns from 'dns';
 try {
     // This is often more effective than setServers for Node 17+
     if (dns.setDefaultResultOrder) {

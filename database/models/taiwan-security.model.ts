@@ -1,5 +1,5 @@
 import { Schema, model, models, type Document, type Model } from 'mongoose';
-import type { TaiwanSecurity } from '@/lib/taiwan/types';
+import type { TaiwanSecurity } from '../../lib/taiwan/types';
 
 export interface ITaiwanSecurity extends Document, Omit<TaiwanSecurity, 'metadata'> {
     metadata: Record<string, string>;
