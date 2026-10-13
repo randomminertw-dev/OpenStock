@@ -1,14 +1,16 @@
 'use server';
 
-import { getDailyCandles, getDailyCandlesWithReason } from './alpaca.actions';
+import { getDailyCandles, getDailyCandlesWithReason, getFactorCandlesWithReason } from './alpaca.actions';
 import { candleMarket } from '../candles/symbols';
 import type { CandleFailureReason, CandleSource } from '../candles/types';
 import { computeAll } from '../indicators';
 import { computeFactors } from '../indicators/factors';
+import { defaultFactorPreference, marketForSymbol, parseFactorPreference } from '../indicators/factor-periods';
 import { computeVariants } from '../indicators/variants';
 import { computeIDS, computeIDSFactor, computeIDSPeriod } from '../indicators/ids';
 import type { Candle, IDSResult, IndicatorResult } from '../indicators/types';
 import type { FourFactors } from '../indicators/factors';
+import type { CryptoInterval } from '../indicators/factor-periods';
 import type {
   VariantIndicatorId,
   VariantResult,
@@ -49,7 +51,8 @@ function toCandles(raw: {
 }
 
 /** Why an assessment could not be produced (for UI messaging). */
-export type AssessmentFailureReason = CandleFailureReason | 'insufficient-data';
+export type AssessmentFailureReason = CandleFailureReason | 'insufficient-data' | 'invalid-preference';
+type IndicatorAssessmentFailureReason = Exclude<AssessmentFailureReason, 'invalid-preference'>;
 
 /**
  * 57-indicator vote + IDS assessment using the market-aware candle entrypoint.
@@ -69,7 +72,7 @@ export async function getIndicatorAssessment(
  */
 export async function getIndicatorAssessmentWithReason(
   symbol: string,
-): Promise<{ assessment: IndicatorAssessment | null; reason: AssessmentFailureReason | null; candleCount: number }> {
+): Promise<{ assessment: IndicatorAssessment | null; reason: IndicatorAssessmentFailureReason | null; candleCount: number }> {
   try {
     if (!symbol) return { assessment: null, reason: 'unsupported-symbol', candleCount: 0 };
 
@@ -151,32 +154,68 @@ export interface FactorAssessment {
 /** Indicator families with multi-period variants (v1.1 §6.5.1 IDS-Period). */
 const VARIANT_INDICATORS: VariantIndicatorId[] = ['RSI', 'ADX_DMI', 'CMF', 'ATR'];
 
-/**
- * Four-factor (T/M/V/R) + variant + IDS assessment for any supported candle market.
- * Returns null (never throws) when: there is no usable candle data,
- * or fewer than 60 candles are available.
- * 1 小時快取由統一入口 getDailyCandles 繼承。
- */
-export async function getFactorAssessment(
+export interface FourFactorAssessment {
+  factors: FourFactors;
+  idsFactor: IDSFactorResult;
+  asof: string;
+  source: CandleSource | null;
+  interval: CryptoInterval | '1d';
+}
+
+/** Configurable T/M/V/R and IDS-Factor; each factor handles its own history threshold. */
+export async function getFourFactorAssessmentWithReason(
   symbol: string,
-): Promise<FactorAssessment | null> {
+  input: unknown,
+): Promise<{ assessment: FourFactorAssessment | null; reason: AssessmentFailureReason | null; candleCount: number }> {
+  const market = marketForSymbol(symbol);
+  if (!market) return { assessment: null, reason: 'unsupported-symbol', candleCount: 0 };
+  let preference;
   try {
-    if (!symbol) return null;
-
-    // days=400 gives R the longest possible ATR% history (up to 252 closes).
-    // Shares the provider cache/in-flight request with the indicator assessment.
-    const raw = await getDailyCandles(symbol, 400);
-    if (!raw || !Array.isArray(raw.c) || raw.c.length < 60) return null;
-
+    preference = parseFactorPreference(market, input);
+  } catch {
+    return { assessment: null, reason: 'invalid-preference', candleCount: 0 };
+  }
+  try {
+    const loaded = await getFactorCandlesWithReason(symbol, preference.interval ?? '1d');
+    const raw = loaded.candles;
+    if (!raw || !Array.isArray(raw.c) || raw.c.length === 0) {
+      return { assessment: null, reason: loaded.reason ?? 'api-error', candleCount: 0 };
+    }
     const candles = toCandles(raw);
-    if (candles.length < 60) return null;
-
-    const factors = computeFactors(candles);
+    if (candles.length === 0) return { assessment: null, reason: 'no-data', candleCount: 0 };
+    const factors = computeFactors(candles, preference.periods);
     const volumeAvailable = raw.volumeComplete !== false && candles.some(c => c.v > 0);
     if (!volumeAvailable) {
       factors.V = { ...factors.V, score: null, reason: '成交量資料缺失或全為零，無法計算量能因素（N/A）' };
     }
+    return {
+      assessment: {
+        factors,
+        idsFactor: computeIDSFactor(factors),
+        asof: new Date(candles[candles.length - 1].t * 1000).toISOString(),
+        source: loaded.source ?? null,
+        interval: preference.interval ?? '1d',
+      },
+      reason: null,
+      candleCount: candles.length,
+    };
+  } catch (e) {
+    console.error(`[factors] unexpected error for ${symbol}:`, e);
+    return { assessment: null, reason: 'api-error', candleCount: 0 };
+  }
+}
 
+/** Fixed-period variants and IDS-Period always use daily candles and the 60-bar gate. */
+export async function getPeriodAssessment(
+  symbol: string,
+): Promise<{ variants: Record<string, VariantResult[]>; idsPeriod: Record<string, IDSPeriodResult> } | null> {
+  try {
+    if (!symbol) return null;
+    const raw = await getDailyCandles(symbol, 400);
+    if (!raw || !Array.isArray(raw.c) || raw.c.length < 60) return null;
+    const candles = toCandles(raw);
+    if (candles.length < 60) return null;
+    const volumeAvailable = raw.volumeComplete !== false && candles.some(c => c.v > 0);
     const variants: Record<string, VariantResult[]> = {};
     const idsPeriod: Record<string, IDSPeriodResult> = {};
     for (const id of VARIANT_INDICATORS) {
@@ -187,21 +226,20 @@ export async function getFactorAssessment(
       variants[id] = vs;
       idsPeriod[id] = computeIDSPeriod(vs);
     }
-
-    // computeIDSFactor accepts FourFactors: R is accepted but never votes
-    // (signature-level exclusion), T/M/V map structurally.
-    const idsFactor = computeIDSFactor(factors);
-
-    return {
-      factors,
-      variants,
-      idsPeriod,
-      idsFactor,
-      asof: new Date(candles[candles.length - 1].t * 1000).toISOString(),
-      symbol,
-    };
+    return { variants, idsPeriod };
   } catch {
-    // Server action contract: never throw.
     return null;
   }
+}
+
+/** Legacy n=14 combined response for existing callers. */
+export async function getFactorAssessment(symbol: string): Promise<FactorAssessment | null> {
+  const market = marketForSymbol(symbol);
+  if (!market) return null;
+  const [factor, period] = await Promise.all([
+    getFourFactorAssessmentWithReason(symbol, defaultFactorPreference(market)),
+    getPeriodAssessment(symbol),
+  ]);
+  if (!factor.assessment || !period) return null;
+  return { ...factor.assessment, ...period, symbol };
 }

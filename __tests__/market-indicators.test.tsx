@@ -106,6 +106,75 @@ describe('indicator assessments across markets', () => {
         if (count === 59) expect(result).toMatchObject({ assessment: null, reason: 'insufficient-data', candleCount: 59 });
         else expect(result.assessment?.results).toHaveLength(57);
     });
+
+    it('keeps 57 votes gated at 60 bars while returning independently calculable factors at 59', async () => {
+        vi.stubGlobal('fetch', marketFetch(59));
+        const { getIndicatorAssessmentWithReason, getFourFactorAssessmentWithReason, getPeriodAssessment } = await import('@/lib/actions/indicators.actions');
+        const preference = { market: 'taiwan', preset: 'short', periods: { T: 7, M: 7, V: 7, R: 7 }, interval: null };
+        const [vote, factor, period] = await Promise.all([
+            getIndicatorAssessmentWithReason('2330.TW'),
+            getFourFactorAssessmentWithReason('2330.TW', preference),
+            getPeriodAssessment('2330.TW'),
+        ]);
+        expect(vote).toMatchObject({ assessment: null, reason: 'insufficient-data', candleCount: 59 });
+        expect(factor).toMatchObject({ reason: null, candleCount: 59, assessment: { interval: '1d', source: { provider: 'finmind' } } });
+        expect(factor.assessment?.factors.M.score).not.toBeNull();
+        expect(factor.assessment?.factors.R.score).toBeNull();
+        expect(factor.assessment?.idsFactor.validCount).toBeGreaterThan(0);
+        expect(period).toBeNull();
+    });
+
+    it('uses 4h only for crypto factors and preserves daily votes and period variants', async () => {
+        const fetcher = vi.fn(async (input: string) => {
+            const url = new URL(input);
+            if (url.hostname !== 'data-api.binance.vision') return json({}, 404);
+            const hourly = url.searchParams.get('interval') === '4h';
+            const values = hourly ? rows(59).map((r, i) => {
+                const c = 150 + i * 0.7;
+                return { ...r, t: Date.parse('2026-10-03T00:00:00Z') + i * 4 * 3600_000,
+                    o: c - 1, h: c + 2, l: c - 2, c, v: i === 58 ? undefined : r.v };
+            }) : rows(270);
+            return json(values.map(r => [r.t, String(r.o), String(r.h), String(r.l), String(r.c), String(r.v), r.t + (hourly ? 4 * 3600_000 : 86400_000) - 1]));
+        });
+        vi.stubGlobal('fetch', fetcher);
+        const { getIndicatorAssessmentWithReason, getFourFactorAssessmentWithReason, getPeriodAssessment, getFactorAssessment } = await import('@/lib/actions/indicators.actions');
+        const preference = { market: 'crypto', preset: 'short', periods: { T: 10, M: 10, V: 10, R: 10 }, interval: '4h' };
+        const [vote, factor, period, legacy] = await Promise.all([
+            getIndicatorAssessmentWithReason('BINANCE:BTCUSDT'),
+            getFourFactorAssessmentWithReason('BINANCE:BTCUSDT', preference),
+            getPeriodAssessment('BINANCE:BTCUSDT'),
+            getFactorAssessment('BINANCE:BTCUSDT'),
+        ]);
+        expect(vote.assessment?.results).toHaveLength(57);
+        expect(factor).toMatchObject({ reason: null, candleCount: 59, assessment: { interval: '4h' } });
+        expect(factor.assessment?.factors.M.n).toBe(10);
+        expect(factor.assessment?.factors.V.score).toBeNull();
+        expect(factor.assessment?.factors.R.score).toBeNull();
+        expect(period).toEqual({ variants: legacy?.variants, idsPeriod: legacy?.idsPeriod });
+        expect(fetcher.mock.calls.filter(([url]) => new URL(url).searchParams.get('interval') === '4h')).toHaveLength(1);
+    });
+
+    it('rejects a forged market and uses daily stock candles even with a 4h preference', async () => {
+        const fetcher = marketFetch();
+        vi.stubGlobal('fetch', fetcher);
+        const { getFourFactorAssessmentWithReason } = await import('@/lib/actions/indicators.actions');
+        const forged = { market: 'crypto', preset: 'short', periods: { T: 10, M: 10, V: 10, R: 10 }, interval: '4h' };
+        const result = await getFourFactorAssessmentWithReason('AAPL', forged);
+        expect(result).toMatchObject({ assessment: null, reason: 'invalid-preference', candleCount: 0 });
+        expect(fetcher).not.toHaveBeenCalled();
+        const valid = await getFourFactorAssessmentWithReason('AAPL', { market: 'us', preset: 'short', periods: { T: 7, M: 7, V: 7, R: 7 }, interval: null });
+        expect(valid.assessment).toMatchObject({ interval: '1d', source: { provider: 'alpaca' } });
+        expect(fetcher.mock.calls.every(([url]) => !new URL(url).searchParams.has('interval'))).toBe(true);
+    });
+
+    it('reports invalid factor periods without fetching candles', async () => {
+        const fetcher = marketFetch();
+        vi.stubGlobal('fetch', fetcher);
+        const { getFourFactorAssessmentWithReason } = await import('@/lib/actions/indicators.actions');
+        const result = await getFourFactorAssessmentWithReason('2330.TW', { market: 'taiwan', preset: 'custom', periods: { T: 0, M: 14, V: 14, R: 14 }, interval: null });
+        expect(result).toMatchObject({ assessment: null, reason: 'invalid-preference', candleCount: 0 });
+        expect(fetcher).not.toHaveBeenCalled();
+    });
 });
 
 describe('rendered stock details', () => {
