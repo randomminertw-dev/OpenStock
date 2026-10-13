@@ -243,7 +243,12 @@ describe('rendered stock details', () => {
         expect(html).toContain('樣本');
         expect(html).toContain('相對該標的自身歷史波動');
         if (symbol === '2330.TW') expect(html).toContain('未還原');
-        if (symbol.startsWith('BINANCE:')) expect(html).toContain('BTCUSDT');
+        if (symbol.startsWith('BINANCE:')) {
+            expect(html).toContain('BTCUSDT');
+            expect(html).toContain('N 是所選週期的 K 線根數');
+            expect(html).toContain('約14天');
+            expect(html).toContain('目前套用：');
+        }
         // One request for each market's candles across the concurrently rendered panels.
         expect(fetcher.mock.calls.filter(([url]) => url.includes('/klines') || url.includes('TaiwanStockPrice'))).toHaveLength(symbol.startsWith('CG:') ? 0 : 1);
     });
@@ -285,6 +290,25 @@ describe('rendered stock details', () => {
             initialResponse={{ assessment: null, reason: 'no-data', candleCount: 0 }} readError={false} initialSaved />);
         expect(html).toContain('現行預設');
         expect(html).toContain('已儲存');
+    });
+
+    it.each([
+        ['4h', '約30天'], ['8h', '約60天'], ['12h', '約90天'], ['1d', '約180天'],
+    ] as const)('renders each crypto factor coverage at %s', async (interval, coverage) => {
+        const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
+        const html = renderToStaticMarkup(<FactorSettings symbol="BINANCE:BTCUSDT"
+            initialPreference={{ market: 'crypto', preset: 'custom', periods: { T: 5, M: 10, V: 30, R: 180 }, interval }}
+            initialResponse={{ assessment: null, reason: 'no-data', candleCount: 0 }} readError={false} initialSaved />);
+        const visibleText = html.replace(/<[^>]+>/g, '');
+        expect(visibleText).toContain('草稿：自訂');
+        expect(visibleText).toContain('目前套用：自訂');
+        expect(visibleText).toContain('T5 / M10 / V30 / R180');
+        expect(visibleText).toContain('N 是所選週期的 K 線根數');
+        expect(visibleText).toContain('長線技術觀察');
+        expect(visibleText).toContain('不含多年基本面');
+        expect(visibleText).toContain(interval === '4h' ? '約20小時' : coverage);
+        expect(visibleText).toContain(coverage);
+        expect(visibleText.match(/約\d+(?:天|小時)(?:\d+小時)?/g)?.length).toBeGreaterThanOrEqual(4);
     });
 
     it('rejects draft edits while a factor request is busy', async () => {

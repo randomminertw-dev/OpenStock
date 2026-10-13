@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { getFourFactorAssessmentWithReason, type AssessmentFailureReason, type FourFactorAssessment } from '@/lib/actions/indicators.actions';
 import { saveFactorPreference } from '@/lib/actions/factor-preferences.actions';
-import { parseFactorPreference, presetFactorPreference, type CryptoInterval, type FactorPreference } from '@/lib/indicators/factor-periods';
+import { cryptoCoverage, parseFactorPreference, presetFactorPreference, withCryptoInterval, type CryptoInterval, type FactorPreference } from '@/lib/indicators/factor-periods';
 import type { FactorId } from '@/lib/indicators/factors';
 import FactorCards from './FactorCards';
 
@@ -60,6 +60,9 @@ const FACTORS: { id: FactorId; label: string }[] = [
 ];
 const PRESETS = ['short', 'medium', 'long'] as const;
 const INTERVALS: CryptoInterval[] = ['4h', '8h', '12h', '1d'];
+const PRESET_LABEL: Record<FactorPreference['preset'], string> = {
+    legacy: '現行預設', short: '短線', medium: '中線', long: '長線技術觀察', custom: '自訂',
+};
 const FAILURE: Record<AssessmentFailureReason, string> = {
     'invalid-preference': '四因素設定無效，請檢查期間與週期。',
     'api-error': '四因素行情服務暫時無法使用，請稍後重試。',
@@ -77,6 +80,8 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
     initialSaved: boolean;
 }) {
     const [draft, setDraft] = useState<FactorPreference | null>(initialPreference);
+    const [applied, setApplied] = useState<FactorPreference | null>(initialPreference);
+    const [appliedSaved, setAppliedSaved] = useState(initialSaved);
     const [shown, setShown] = useState(initialResponse);
     const [status, setStatus] = useState<FactorStatus>(initialSaved ? 'saved' : 'idle');
     const [message, setMessage] = useState('');
@@ -104,7 +109,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
 
     function selectInterval(interval: CryptoInterval) {
         if (!draft || busy) return;
-        setDraft(current => current && editFactorDraft(current, { ...current, interval }, busy));
+        setDraft(current => current && editFactorDraft(current, withCryptoInterval(current, interval), busy));
         setStatus('idle');
         setMessage('');
         setRetryPreference(null);
@@ -144,6 +149,8 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
             setRetryPreference(isRetryableFactorFailure(outcome) ? outcome.preference : null);
             if (outcome.response) {
                 setShown(outcome.response);
+                setApplied(outcome.preference);
+                setAppliedSaved(save);
                 if (outcome.response.reason) setMessage(FAILURE[outcome.response.reason]);
             }
         } finally {
@@ -191,6 +198,10 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
                             ? '現行預設：四因素皆 n=14，crypto 使用 1d。'
                             : '選擇預設或分別調整四個因素；預覽只影響目前頁面。'}
                     </p>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-relaxed text-faint">
+                        <span>草稿：<strong className="text-foreground">{PRESET_LABEL[draft.preset]}</strong>{draft.market === 'crypto' && ` · ${draft.interval}`}</span>
+                        <span>目前套用：<strong className="text-foreground">{applied ? PRESET_LABEL[applied.preset] : '固定設定'}</strong>{applied && <span className="num"> · T{applied.periods.T} / M{applied.periods.M} / V{applied.periods.V} / R{applied.periods.R}</span>}{applied?.market === 'crypto' && ` · ${applied.interval}`} · {appliedSaved ? '已儲存' : '未儲存'}</span>
+                    </div>
                     <div className="mt-3 grid grid-cols-3 gap-2" role="group" aria-label="期間預設">
                         {PRESETS.map(preset => {
                             const n = draft.market === 'crypto'
@@ -199,7 +210,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
                             return <button key={preset} type="button" disabled={busy} onClick={() => selectPreset(preset)}
                                 aria-pressed={draft.preset === preset}
                                 className={`min-h-11 rounded-lg border px-1 py-2 text-[12px] font-bold transition-colors ${draft.preset === preset ? 'border-gold bg-gold/15 text-gold' : 'border-line text-faint hover:bg-hover/50 hover:text-foreground'}`}>
-                                {({ short: '短期', medium: '中期', long: '長期' } as const)[preset]} <span className="num">{n}</span>
+                                {({ short: '短線', medium: '中線', long: '長線技術觀察' } as const)[preset]} <span className="num">{n}</span>
                             </button>;
                         })}
                     </div>
@@ -209,9 +220,11 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
                             <input type="number" inputMode="numeric" min={5} max={max} step={1} disabled={busy} value={Number.isNaN(draft.periods[id]) ? '' : draft.periods[id]}
                                 onChange={event => updatePeriod(id, event.target.value)}
                                 className="num h-11 w-full min-w-0 rounded-lg border border-line bg-card px-3 text-[16px] font-semibold text-foreground focus:border-gold focus:outline-none" />
+                            {draft.market === 'crypto' && draft.interval && <span className="mt-1 block text-[10.5px] font-normal text-faint">{cryptoCoverage(draft.periods[id], draft.interval)}</span>}
                         </label>)}
                     </div>
                     <p className="mt-1 text-[11px] text-faint">N 可設 5–{max}，需為整數。</p>
+                    {draft.market === 'crypto' && <p className="mt-1 text-[11px] leading-relaxed text-faint">N 是所選週期的 K 線根數；切換週期不改 N，約略涵蓋時間會跟著變。長線技術觀察不含多年基本面。</p>}
                     {draft.market === 'crypto' && (
                         <div className="mt-3">
                             <p className="mb-1 text-[11px] font-semibold text-faint">四因素 K 線週期</p>

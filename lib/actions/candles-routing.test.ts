@@ -56,6 +56,42 @@ describe('recent closed crypto factor candles', () => {
         expect(fallback).not.toHaveBeenCalled();
     });
 
+    it.each(['BINANCE:BTCUSDT', 'CG:bitcoin'])('retains at least 432 recent valid closed %s bars from a mixed 550-bar response', async (symbol) => {
+        vi.setSystemTime(now);
+        const duration = 4 * 3600_000;
+        const bars = Array.from({ length: 550 }, (_, i) => {
+            const start = now - (550 - i) * duration;
+            return symbol.startsWith('BINANCE:') ? binanceBar(start, duration) : alpacaBar(start);
+        });
+        // Ten malformed/duplicate rows, one still-open bar and one latest valid close.
+        if (symbol.startsWith('BINANCE:')) {
+            bars[20] = [NaN, '100', '108', '99', '105', '12', NaN] as typeof bars[number];
+            bars[21] = [now - 549 * duration, '100', '108', '99', '105', '12', now - 548 * duration - 1] as typeof bars[number];
+            bars[22] = [now - 528 * duration, 'bad', '108', '99', '105', '12', now - 527 * duration - 1] as typeof bars[number];
+        } else {
+            bars[20] = { ...bars[20], t: 'not-a-date' };
+            bars[21] = { ...bars[21], t: new Date(now - 549 * duration).toISOString() };
+            bars[22] = { ...bars[22], o: NaN };
+        }
+        for (let i = 23; i < 30; i++) bars[i] = bars[22];
+        bars[548] = symbol.startsWith('BINANCE:')
+            ? binanceBar(now - duration, duration) as typeof bars[number]
+            : alpacaBar(now - duration) as typeof bars[number];
+        bars[549] = symbol.startsWith('BINANCE:')
+            ? binanceBar(now, duration) as typeof bars[number]
+            : alpacaBar(now) as typeof bars[number];
+        const fetcher = vi.fn(async (url: string) => url.includes('api.coingecko.com')
+            ? response({ symbol: 'btc' }) : url.includes('binance')
+                ? response(bars) : response({ bars: { 'BTC/USD': bars } }));
+        vi.stubGlobal('fetch', fetcher);
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        const result = await getFactorCandlesWithReason(symbol, '4h');
+        expect(result.reason).toBeNull();
+        expect(result.candles!.t.length).toBeGreaterThanOrEqual(432);
+        expect(result.candles!.t.at(-1)).toBe((now - duration) / 1000);
+        expect(result.candles!.t).not.toContain(now / 1000);
+    });
+
     it.each(intervals)('loads recent closed CG %s bars through Alpaca', async (interval, hours, timeframe) => {
         vi.setSystemTime(now);
         const duration = hours * 3600_000;

@@ -19,6 +19,19 @@ const PRESET_PERIODS = {
   crypto: { short: 10, medium: 30, long: 180 },
 };
 
+/** 週期切換只改 K 線長度，四項 N 仍代表原本的根數。 */
+export function withCryptoInterval(preference: FactorPreference, interval: CryptoInterval): FactorPreference {
+  return { ...preference, interval };
+}
+
+export function cryptoCoverage(n: number, interval: CryptoInterval): string {
+  if (!Number.isInteger(n) || n < 1) return '—';
+  const hours = n * { '4h': 4, '8h': 8, '12h': 12, '1d': 24 }[interval];
+  const days = Math.floor(hours / 24);
+  const remainder = hours % 24;
+  return `約${days ? `${days}天` : ''}${remainder ? `${remainder}小時` : ''}`;
+}
+
 export function marketForSymbol(symbol: string): FactorMarket | null {
   const market = candleMarket(symbol);
   switch (market.kind) {

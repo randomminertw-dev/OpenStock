@@ -14,10 +14,10 @@ export async function binanceIntervalCandles(pair: string, interval: Exclude<Cry
         const start = Math.floor(now / duration) * duration - 550 * duration;
         const query = new URLSearchParams({ symbol: pair, interval, startTime: String(start), endTime: String(now), limit: '1000' });
         const data = await fetchCandleJson(`https://data-api.binance.vision/api/v3/klines?${query}`);
-        if (!Array.isArray(data) || data.some(row => !Array.isArray(row) || row.length < 7 || !Number.isFinite(Number(row[6])))) {
+        if (!Array.isArray(data)) {
             throw new CandleRequestError('api-error');
         }
-        return normalizeCandles(data.filter(row => Number(row[6]) < now).map(row => ({
+        return normalizeCandles(data.filter(row => Array.isArray(row) && row.length >= 7 && Number.isFinite(Number(row[6])) && Number(row[6]) < now).map(row => ({
             t: Number(row[0]) / 1000, o: row[1], h: row[2], l: row[3], c: row[4], v: row[5],
         })));
     });

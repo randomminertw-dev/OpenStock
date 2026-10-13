@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultFactorPreference, marketForSymbol, parseFactorPreference, presetFactorPreference } from './factor-periods';
+import { cryptoCoverage, defaultFactorPreference, marketForSymbol, parseFactorPreference, presetFactorPreference, withCryptoInterval } from './factor-periods';
 import type { FactorMarket } from './factor-periods';
 
 describe('factor preferences', () => {
@@ -46,5 +46,22 @@ describe('factor preferences', () => {
       expect(parseFactorPreference('crypto', { ...defaultFactorPreference('crypto'), interval }).interval).toBe(interval);
     }
     for (const interval of ['1h', '', null, undefined]) expect(() => parseFactorPreference('crypto', { ...defaultFactorPreference('crypto'), interval })).toThrow();
+  });
+
+  it('keeps all four candle counts when changing crypto interval', () => {
+    const original = parseFactorPreference('crypto', { ...defaultFactorPreference('crypto'), periods: { T: 5, M: 10, V: 30, R: 180 } });
+    for (const interval of ['4h', '8h', '12h', '1d'] as const) {
+      expect(withCryptoInterval(original, interval)).toEqual({ ...original, interval });
+    }
+  });
+
+  it.each([
+    ['4h', '約20小時', '約30天'],
+    ['8h', '約1天16小時', '約60天'],
+    ['12h', '約2天12小時', '約90天'],
+    ['1d', '約5天', '約180天'],
+  ] as const)('shows elapsed time for N=5 and N=180 at %s', (interval, short, long) => {
+    expect(cryptoCoverage(5, interval)).toBe(short);
+    expect(cryptoCoverage(180, interval)).toBe(long);
   });
 });
