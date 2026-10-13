@@ -213,7 +213,25 @@ ALPACA_API_SECRET=your_alpaca_secret
 
 # CoinGecko (cryptocurrency prices; free, no key required)
 # Optional: COINGECKO_DEMO_API_KEY=your_demo_key (raises rate limits)
-# Optional: FINMIND_API_TOKEN=your_finmind_token (Taiwan daily history; sent server-side only)
+
+# Taiwan Official Market Data & Sync (TWSE / TPEX)
+# Rollback flag for daily candles: "official" (default, TWSE/TPEX) or "finmind" (legacy fallback)
+TAIWAN_CANDLE_PROVIDER=official
+
+# Background sync flags (defaults to disabled; explicit true required)
+TAIWAN_AUTO_SYNC_ENABLED=false
+TAIWAN_HISTORY_ENABLED=false
+
+# Bounded sync budgets (all must be explicit positive integers; background sync disabled if missing)
+TAIWAN_MAX_REQUESTS_PER_DAY=200
+TAIWAN_MAX_JOBS_PER_DAY=50
+TAIWAN_MAX_TRANSFER_BYTES_PER_DAY=104857600
+TAIWAN_MAX_STORAGE_BYTES=1073741824
+TAIWAN_MAX_TRACKED_SECURITIES=200
+TAIWAN_MAX_RESPONSE_BYTES=15728640
+
+# FinMind (legacy fallback; Taiwan daily history when TAIWAN_CANDLE_PROVIDER=finmind; sent server-side only)
+# Optional: FINMIND_API_TOKEN=your_finmind_token
 
 # Sentiment insights (optional)
 ADANOS_API_KEY=your_adanos_api_key
@@ -302,8 +320,19 @@ public/assets/images/   # logos and screenshots
     - Crypto-tab pairs such as `BINANCE:BTCUSDT` use `data-api.binance.vision/api/v3/klines` without an API key.
     - Preserves the exact trading pair and excludes unfinished daily candles; does not substitute USD for USDT.
 
-- FinMind
-    - Taiwan daily OHLCV from `TaiwanStockPrice`, including listed and OTC stocks.
+- Taiwan Official Market Data (TWSE & TPEX)
+    - Official open data and after-trading APIs for listed (TWSE) and OTC (TPEX) stocks and ETFs.
+    - Endpoints:
+        - TWSE: `twse-stock-day-all` (daily close snapshot), `STOCK_DAY` (monthly history), `t187ap03_L` / `t187ap47_L` (stock & ETF catalog), `BWIBBU_ALL` (PE/PB/dividend yield), `TWT48U_ALL` (ex-dividend/capital changes), `twse-holiday` (trading calendar).
+        - TPEX: `tpex-mainboard-daily-close-quotes` (daily close snapshot), `dailyQuotes` (full-market daily OHLCV batch), `mopsfin_t187ap03_O` / ETF filter (OTC stock & ETF catalog), `tpex_mainboard_peratio_analysis` (PE/PB/yield), `tpex_exright_prepost` (ex-rights).
+    - Exact shares volume: Volume represents exact trading shares (`成交股數`), not lots (張) multiplied by 1,000.
+    - Price basis & freshness: Unadjusted prices in the Asia/Taipei timezone. OpenAPI snapshots are flagged `complete: false`; verified after-trading historical bars are flagged `complete: true`. No synthetic bars are fabricated for halted or non-trading days.
+    - Zero-cost architecture & Free sync quotas: Public endpoints with zero API fees. Network requests, transfer bytes, jobs, and storage are strictly bounded by atomic daily budgets in MongoDB. Background sync is disabled by default (`TAIWAN_AUTO_SYNC_ENABLED=false`, `TAIWAN_HISTORY_ENABLED=false`) until explicitly configured.
+    - Rollback flag: `TAIWAN_CANDLE_PROVIDER=official|finmind` (default: `official`). When set to `finmind`, daily candles and technical indicators fall back to the FinMind provider.
+    - TradingView intraday scope: The TradingView embeddable widgets provide intraday chart and quote views (subject to TradingView's available data feeds); the native SVG charts, 57 technical indicators, and four-factor scores use official EOD daily bars stored in MongoDB.
+
+- FinMind (Legacy / Rollback Fallback)
+    - Taiwan daily OHLCV from `TaiwanStockPrice` as a transitional fallback provider when `TAIWAN_CANDLE_PROVIDER=finmind`.
     - Accepts `.TW` / `.TWO` and `TWSE:` / `TPEX:` symbols. Prices are unadjusted, end-of-day, in the Taipei trading calendar.
     - Works without a key; optionally set server-only `FINMIND_API_TOKEN` for your account quota. Never use a `NEXT_PUBLIC_` prefix.
 
@@ -346,6 +375,11 @@ Package scripts
 - `start`: Run production server
 - `lint`: ESLint
 - `test:db`: Validate DB connectivity
+- `taiwan:build-sync`: Compile TypeScript CLI entry into `.taiwan-sync/` using `tsc`
+- `taiwan:sync`: Taiwan market sync & inspection CLI (dry-run inspection or scoped apply within configured quotas)
+  - Dry run inspection: `npm run taiwan:sync -- --dry-run --symbols TWSE:2330,TWSE:0050,TPEX:6488,TPEX:00679B --days 800`
+  - Scoped synchronization: `npm run taiwan:sync -- --apply --target production --symbols TWSE:2330,TWSE:0050 --days 800`
+  - Supported flags: `--dry-run`, `--apply`, `--target <label>`, `--symbols <list>`, `--days <1-1000>`, `--close`, `--catalog`, `--details`, `--history`
 
 Developer experience
 - TypeScript strict mode

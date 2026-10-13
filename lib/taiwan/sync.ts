@@ -136,11 +136,12 @@ export async function syncTaiwanClose(input: {
         }
 
         // 2. Holiday Schedule Check (Conservative freshness)
-        let holidays = new Set<string>();
+        let _holidays = new Set<string>();
         try {
             const rawHolidays = await fetchTaiwanDataset('twse-holiday', request);
             summary.requested++;
-            holidays = parseTaiwanHolidays(rawHolidays);
+            _holidays = parseTaiwanHolidays(rawHolidays);
+            void _holidays;
         } catch (err) {
             summary.failures.push(`Holiday schedule error: ${err instanceof Error ? err.message : String(err)}`);
         }

@@ -91,11 +91,11 @@ type TaiwanDetails = {
 
 **Interfaces:** Produces `parseTaiwanKey(value: string): TaiwanKey | null`（只解析帶市場的代號）、`taiwanAliases(key: TaiwanKey): string[]`、`parseTaiwanDate(value: string): string | null`、`parseTaiwanNumber(value: unknown): number | null`、`fetchTaiwanHistory(key: TaiwanKey, period: string, request: TaiwanRequester): Promise<TaiwanBar[]>`（TWSE 返回該商品，TPEX 返回該日全市場列，Task 4 統一篩選追蹤商品）。`period` 為 TWSE 的 `YYYY-MM` 或 TPEX 的 `YYYY-MM-DD`。`TaiwanRequester = (url: string, init?: RequestInit) => Promise<unknown>`，同步透過 Task 3 的受限 request 注入，來源不自行重試。
 
-- [ ] **1. 紅燈測試：** `parseTaiwanDate('115/09/01') === '2026-09-01'`；非法日期為 null；`parseTaiwanNumber('20,826,466') === 20826466`、空值為 null、字串 `0` 為 0；別名保留 `00400A`。TWSE fixture 0050 為 `stat: OK`、fields 帶額外註記欄；TPEX fixture `stat: ok`、tables 內 `成交股數` 為 13,645,310，assert volume 不為 12,770,000。
-- [ ] **2. 執行：** `npx vitest run lib/taiwan/parsers.test.ts lib/taiwan/sources.test.ts`；預期新模組未定義而失敗。
-- [ ] **3. 實作來源：** TWSE `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=YYYYMM01&stockNo=code`；TPEX `https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes?date=YYYY/MM/DD&response=json`。TPEX 回傳全日行情，此接口回傳所有列供 Task 4 按當次追蹤集合篩選，不能每檔重抓。不得使用 `tradingStock` 月份張數當正式 volume。欄位名映射、OHLC 一致性、零成交、malformed、回應日期／代號不符須區分錯誤；另建立最新行情及原始 dataset loaders `fetchTaiwanDataset(id: TaiwanDatasetId, request: TaiwanRequester): Promise<unknown>`。
-- [ ] **4. 綠燈測試：** 同 Step 2；增加 HTTP 403／429、HTML 200、有效空資料、混合無效列及跨月日期 fixture，全部 PASS。HTTP／格式錯誤不得記為歷史已完成。
-- [ ] **5. Commit：** `feat: add official Taiwan market adapters`，只納入本任務檔案。不再次下載整批歷史來代替 mock 測試。
+- [x] **1. 紅燈測試：** `parseTaiwanDate('115/09/01') === '2026-09-01'`；非法日期為 null；`parseTaiwanNumber('20,826,466') === 20826466`、空值為 null、字串 `0` 為 0；別名保留 `00400A`。TWSE fixture 0050 為 `stat: OK`、fields 帶額外註記欄；TPEX fixture `stat: ok`、tables 內 `成交股數` 為 13,645,310，assert volume 不為 12,770,000。
+- [x] **2. 執行：** `npx vitest run lib/taiwan/parsers.test.ts lib/taiwan/sources.test.ts`；預期新模組未定義而失敗。
+- [x] **3. 實作來源：** TWSE `https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json&date=YYYYMM01&stockNo=code`；TPEX `https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes?date=YYYY/MM/DD&response=json`。TPEX 回傳全日行情，此接口回傳所有列供 Task 4 按當次追蹤集合篩選，不能每檔重抓。不得使用 `tradingStock` 月份張數當正式 volume。欄位名映射、OHLC 一致性、零成交、malformed、回應日期／代號不符須區分錯誤；另建立最新行情及原始 dataset loaders `fetchTaiwanDataset(id: TaiwanDatasetId, request: TaiwanRequester): Promise<unknown>`。
+- [x] **4. 綠燈測試：** 同 Step 2；增加 HTTP 403／429、HTML 200、有效空資料、混合無效列及跨月日期 fixture，全部 PASS。HTTP／格式錯誤不得記為歷史已完成。
+- [x] **5. Commit：** `feat: add official Taiwan market adapters`，只納入本任務檔案。不再次下載整批歷史來代替 mock 測試。
 
 ### Task 2：完整商品索引、ETF 與官方資訊
 
@@ -103,11 +103,11 @@ type TaiwanDetails = {
 
 **Interfaces:** Consumes Task 1 types／loaders。Produces `buildTaiwanCatalog(input: TaiwanCatalogInput): TaiwanSecurity[]`、`searchTaiwanCatalog(items: TaiwanSecurity[], query: string, limit = 15): TaiwanSecurity[]`、`buildTaiwanDetails(security: TaiwanSecurity, datasets: TaiwanDatasetBundle): TaiwanDetails`。在 `types.ts` 定義 `TaiwanDatasetId` 由 `datasets.ts` 的 const registry keys 推導，`TaiwanDatasetBundle = Partial<Record<TaiwanDatasetId, unknown>>`、`TaiwanCatalogInput` 為該 bundle。
 
-- [ ] **1. 紅燈測試：** 公司名單沒有 0050，但基金清單有時仍被找到；`00679B` 為 TPEX etf；中文、代號、前綴、後綴結果一致；無行情的已知商品保留；未知類型不分類為 stock；外幣來源無幣別時 currency null；一般 TWD 判定亦須保留官方交易幣別的證據，不能以基金持有海外資產推定交易幣別；ETF details 沒有公司 PE／EPS。財務空 PE 不為 0，季度累計不當單季。
-- [ ] **2. 執行：** `npx vitest run lib/taiwan/catalog.test.ts lib/taiwan/fundamentals.test.ts`；預期 FAIL。
-- [ ] **3. 實作：** TWSE 公司／基金 `opendata/t187ap03_L`、`t187ap47_L`；TPEx 公司 `/openapi/v1/mopsfin_t187ap03_O`、ETF `POST https://info.tpex.org.tw/api/etfFilter` 的 `data` 列。基本主檔＋基金主檔作分類權威，行情補名稱與可用資料；不能憑代號或最近行情宣告下市。財務 dataset 使用 TWSE `BWIBBU_ALL`、`t187ap05_L`、`t187ap14_L`、`t187ap04_L` 及各產業 `t187ap06_L_*`／`t187ap07_L_*`，TPEx 對應 `tpex_mainboard_peratio_analysis`、`mopsfin_t187ap05_O`、`mopsfin_t187ap14_O`、`mopsfin_t187ap04_O` 與 `mopsfin_t187ap0{6,7}_O_*`。adapter 啟用前對照 Swagger 定義確認每個產業存在的路徑，fixture 記錄實際 schema，未提供的欄位 null。事件來源為 TWSE `TWT48U_ALL`、TPEx `tpex_exright_prepost`；不足以確認 split 時顯示未調整價提醒，不推算分割。
-- [ ] **4. 綠燈：** Step 2 全 PASS；外部網址只允許 HTTPS 與可信官方／發行人網址，公告內容當純文字渲染；ETF 可顯示發行人／上市日／指數等已取資料，無資料維持缺值。
-- [ ] **5. Commit：** `feat: index Taiwan stocks and ETFs with official details`。
+- [x] **1. 紅燈測試：** 公司名單沒有 0050，但基金清單有時仍被找到；`00679B` 為 TPEX etf；中文、代號、前綴、後綴結果一致；無行情的已知商品保留；未知類型不分類為 stock；外幣來源無幣別時 currency null；一般 TWD 判定亦須保留官方交易幣別的證據，不能以基金持有海外資產推定交易幣別；ETF details 沒有公司 PE／EPS。財務空 PE 不為 0，季度累計不當單季。
+- [x] **2. 執行：** `npx vitest run lib/taiwan/catalog.test.ts lib/taiwan/fundamentals.test.ts`；預期 FAIL。
+- [x] **3. 實作：** TWSE 公司／基金 `opendata/t187ap03_L`、`t187ap47_L`；TPEx 公司 `/openapi/v1/mopsfin_t187ap03_O`、ETF `POST https://info.tpex.org.tw/api/etfFilter` 的 `data` 列。基本主檔＋基金主檔作分類權威，行情補名稱與可用資料；不能憑代號或最近行情宣告下市。財務 dataset 使用 TWSE `BWIBBU_ALL`、`t187ap05_L`、`t187ap14_L`、`t187ap04_L` 及各產業 `t187ap06_L_*`／`t187ap07_L_*`，TPEx 對應 `tpex_mainboard_peratio_analysis`、`mopsfin_t187ap05_O`、`mopsfin_t187ap14_O`、`mopsfin_t187ap04_O` 與 `mopsfin_t187ap0{6,7}_O_*`。adapter 啟用前對照 Swagger 定義確認每個產業存在的路徑，fixture 記錄實際 schema，未提供的欄位 null。事件來源為 TWSE `TWT48U_ALL`、TPEx `tpex_exright_prepost`；不足以確認 split 時顯示未調整價提醒，不推算分割。
+- [x] **4. 綠燈：** Step 2 全 PASS；外部網址只允許 HTTPS 與可信官方／發行人網址，公告內容當純文字渲染；ETF 可顯示發行人／上市日／指數等已取資料，無資料維持缺值。
+- [x] **5. Commit：** `feat: index Taiwan stocks and ETFs with official details`。
 
 ### Task 3：持久資料庫、工作 lease 與零費用預算
 
@@ -115,11 +115,11 @@ type TaiwanDetails = {
 
 **Interfaces:** Produces `TaiwanRepository` interface（同步與讀取均注入同一 interface），方法 `readCatalog(): Promise<TaiwanSecurity[]>`、`readBars(key, from, through): Promise<TaiwanBar[]>`、`readDetails(key): Promise<TaiwanDetails | null>`、`writeCatalog(items): Promise<void>`、`writeBars(bars): Promise<void>`、`writeDetails(details): Promise<void>`、`claimJob(jobKey, owner, ttlMs): Promise<boolean>`、`releaseJob(jobKey, owner): Promise<void>`、`readHistoryStatus(key): Promise<TaiwanHistoryStatus>`、`writeHistoryStatus(key, status): Promise<void>`、`readDatasetCheckpoint(id): Promise<string | null>`、`writeDatasetCheckpoint(id, asof): Promise<void>`。`key: TaiwanKey`、日期 string。Produces `loadTaiwanSyncConfig(env: NodeJS.ProcessEnv): TaiwanSyncConfig | null`、`createBudgetedRequest(repo, config): TaiwanRequester`；interface 增加原子 `reserveUsage(day, amounts, limits)`、`settleUsage(day, amounts)`，amounts／limits 的 requests、jobs、transferBytes、storageBytes 均整數。
 
-- [ ] **1. 紅燈測試：** 同商品同日重寫只有一筆且可更正；雙 instance 僅一個 claim；非 owner 不能 release；過期可重取。預算缺設定／0／負數／NaN 時關閉；並行扣量不超限；被拒絕 request 不呼叫 fetch。全額預留 response 上限後以實收結算，不超限後才發現。
-- [ ] **2. 執行：** `npx vitest run lib/taiwan/repository.test.ts lib/taiwan/budget.test.ts`；預期 FAIL；mock Mongoose，不連正式 DB。
-- [ ] **3. 實作：** 唯一索引 security(exchange,code)、bar(exchange,code,tradingDate,priceBasis)、dataset(id,key,period)、job(jobKey)、usage(day)；原子條件更新／unique contention 處理。budgets 使用 Taipei 日界，schema／索引建立耗用含部署說明，DB 未設定時回報 missing-config。env 旗標 `TAIWAN_AUTO_SYNC_ENABLED`、`TAIWAN_HISTORY_ENABLED` 預設 false；`TAIWAN_MAX_REQUESTS_PER_DAY`、`TAIWAN_MAX_JOBS_PER_DAY`、`TAIWAN_MAX_TRANSFER_BYTES_PER_DAY`、`TAIWAN_MAX_STORAGE_BYTES`、`TAIWAN_MAX_TRACKED_SECURITIES`、`TAIWAN_MAX_RESPONSE_BYTES` 必須明確正整數。資料集約 4.86 MB，response 上限太小時拒絕啟用該 dataset。串流限制實收 bytes，10 秒 timeout，單一上游併發 1、至少 2 秒間距為保守預設；429／5xx 重試最多兩次且每次再次預留預算。所有 request 必須經受限 requester；不記錄憑證或完整原始財報。
-- [ ] **4. 綠燈：** Step 2 PASS；壓縮與無 Content-Length 回應仍限制解碼後大小；memory fixture 模擬 race／lease expiry。保留原 bar 完成日期與 fetchedAt，來自較早交易日的資料不得覆寫較新收盤。
-- [ ] **5. Commit：** `feat: persist Taiwan data with bounded sync budgets`。
+- [x] **1. 紅燈測試：** 同商品同日重寫只有一筆且可更正；雙 instance 僅一個 claim；非 owner 不能 release；過期可重取。預算缺設定／0／負數／NaN 時關閉；並行扣量不超限；被拒絕 request 不呼叫 fetch。全額預留 response 上限後以實收結算，不超限後才發現。
+- [x] **2. 執行：** `npx vitest run lib/taiwan/repository.test.ts lib/taiwan/budget.test.ts`；預期 FAIL；mock Mongoose，不連正式 DB。
+- [x] **3. 實作：** 唯一索引 security(exchange,code)、bar(exchange,code,tradingDate,priceBasis)、dataset(id,key,period)、job(jobKey)、usage(day)；原子條件更新／unique contention 處理。budgets 使用 Taipei 日界，schema／索引建立耗用含部署說明，DB 未設定時回報 missing-config。env 旗標 `TAIWAN_AUTO_SYNC_ENABLED`、`TAIWAN_HISTORY_ENABLED` 預設 false；`TAIWAN_MAX_REQUESTS_PER_DAY`、`TAIWAN_MAX_JOBS_PER_DAY`、`TAIWAN_MAX_TRANSFER_BYTES_PER_DAY`、`TAIWAN_MAX_STORAGE_BYTES`、`TAIWAN_MAX_TRACKED_SECURITIES`、`TAIWAN_MAX_RESPONSE_BYTES` 必須明確正整數。資料集約 4.86 MB，response 上限太小時拒絕啟用該 dataset。串流限制實收 bytes，10 秒 timeout，單一上游併發 1、至少 2 秒間距為保守預設；429／5xx 重試最多兩次且每次再次預留預算。所有 request 必須經受限 requester；不記錄憑證或完整原始財報。
+- [x] **4. 綠燈：** Step 2 PASS；壓縮與無 Content-Length 回應仍限制解碼後大小；memory fixture 模擬 race／lease expiry。保留原 bar 完成日期與 fetchedAt，來自較早交易日的資料不得覆寫較新收盤。
+- [x] **5. Commit：** `feat: persist Taiwan data with bounded sync budgets`。
 
 ### Task 4：盤後同步、歷史工作與手動 CLI
 
@@ -127,11 +127,11 @@ type TaiwanDetails = {
 
 **Interfaces:** Consumes Tasks 1–3。Produces `syncTaiwanClose(input: { repo: TaiwanRepository; request: TaiwanRequester; now: Date }): Promise<SyncSummary>`、`planTaiwanHistory(key, days, now): HistoryUnit[]`、`syncTaiwanHistory(input: { repo; request; keys: TaiwanKey[]; days: number; now: Date }): Promise<SyncSummary>`、`requestTaiwanHistory(key: TaiwanKey, days: number): Promise<TaiwanHistoryStatus>`（去重與 Inngest dispatch；無服務則 disabled）。`HistoryUnit = { exchange; period; keys: TaiwanKey[] }`、`SyncSummary = { requested: number; written: number; skipped: number; failures: string[] }` 定義於 types。參數 1–1000 日，預設回填 800。
 
-- [ ] **1. 紅燈測試：** 不同 TPEX 商品同一天只一次 request；TWSE 月工作去重；由近至遠；400／800 切片；failed 月／日不標完成。資料日期舊於今日仍顯示舊日期，當日僅有 OpenAPI 快照不能完成；历史確認後才提升完成狀態。API 失敗保留成功資料；預算不足回傳 partial／budget-limit；停牌／週末有效 no-data 不捏造 bar；每日財務資料集成功後不重複全量抓。
-- [ ] **2. 執行：** `npx vitest run lib/taiwan/sync.test.ts lib/taiwan/history.test.ts __tests__/taiwan-sync-cli.test.ts`；預期 FAIL。
-- [ ] **3. 實作：** 工作 lease 與預算、唯一 upsert、有限 retry。TWSE `holidaySchedule/holidaySchedule` 與 TPEx 官方開休市表用於判定最近應完成交易日；來源未取得時 freshness 保守標示待確認，不以週一至週五直接斷定交易日。TPEX 每日頁只保存此次追蹤集合的 canonical OHLCV，日期下載供所有追蹤商品共用；月頁不當 cache 正式日 K。近 5 個有效交易日有預算時重抓以處理更正，歷史 retention 1000 日上限，追蹤商品數依配額。同步窗口 `TZ=Asia/Taipei 30 14 * * 1-5`、`TZ=Asia/Taipei 0 18 * * 1-5`，依現有 Inngest cron 語法當次官方文件確認；旗標 false 不註冊。公告／財務在剩餘預算允許時更新，某一資料集失敗不阻止其他已成功結果。當日完整性以官方歷史回應＋收盤後時段及後續複核確認，不用時鐘單獨推定。
-- [ ] **4. CLI 實作與驗證：** `npm run taiwan:sync -- --dry-run --symbols TWSE:2330,TWSE:0050,TPEX:6488,TPEX:00679B --days 800`；dry-run 只列 URL／任務數與目標環境標籤，不讀寫 DB／上游；執行模式需 `--apply --target <label>` 與明確 budget，缺任一參數退出非 0。編譯 entry 至被忽略 `.taiwan-sync/`，使用既有 typescript（CLI 依賴不可含 server-only／Next alias），支持僅 close/catalog/details 或有範圍的 history。不執行實際 --apply；Step 2 全 PASS。
-- [ ] **5. Commit：** `feat: synchronize official Taiwan data within free quotas`。
+- [x] **1. 紅燈測試：** 不同 TPEX 商品同一天只一次 request；TWSE 月工作去重；由近至遠；400／800 切片；failed 月／日不標完成。資料日期舊於今日仍顯示舊日期，當日僅有 OpenAPI 快照不能完成；历史確認後才提升完成狀態。API 失敗保留成功資料；預算不足回傳 partial／budget-limit；停牌／週末有效 no-data 不捏造 bar；每日財務資料集成功後不重複全量抓。
+- [x] **2. 執行：** `npx vitest run lib/taiwan/sync.test.ts lib/taiwan/history.test.ts __tests__/taiwan-sync-cli.test.ts`；預期 FAIL。
+- [x] **3. 實作：** 工作 lease 與預算、唯一 upsert、有限 retry。TWSE `holidaySchedule/holidaySchedule` 與 TPEx 官方開休市表用於判定最近應完成交易日；來源未取得時 freshness 保守標示待確認，不以週一至週五直接斷定交易日。TPEX 每日頁只保存此次追蹤集合的 canonical OHLCV，日期下載供所有追蹤商品共用；月頁不當 cache 正式日 K。近 5 個有效交易日有預算時重抓以處理更正，歷史 retention 1000 日上限，追蹤商品數依配額。同步窗口 `TZ=Asia/Taipei 30 14 * * 1-5`、`TZ=Asia/Taipei 0 18 * * 1-5`，依現有 Inngest cron 語法當次官方文件確認；旗標 false 不註冊。公告／財務在剩餘預算允許時更新，某一資料集失敗不阻止其他已成功結果。當日完整性以官方歷史回應＋收盤後時段及後續複核確認，不用時鐘單獨推定。
+- [x] **4. CLI 實作與驗證：** `npm run taiwan:sync -- --dry-run --symbols TWSE:2330,TWSE:0050,TPEX:6488,TPEX:00679B --days 800`；dry-run 只列 URL／任務數與目標環境標籤，不讀寫 DB／上游；執行模式需 `--apply --target <label>` 與明確 budget，缺任一參數退出非 0。編譯 entry 至被忽略 `.taiwan-sync/`，使用既有 typescript（CLI 依賴不可含 server-only／Next alias），支持僅 close/catalog/details 或有範圍的 history。不執行實際 --apply；Step 2 全 PASS。
+- [x] **5. Commit：** `feat: synchronize official Taiwan data within free quotas`。
 
 ### Task 5：官方搜尋、自選收盤與別名相容
 
@@ -139,11 +139,11 @@ type TaiwanDetails = {
 
 **Interfaces:** Produces `getTaiwanSecurity(symbol: string): Promise<TaiwanSecurity | null>`、`getTaiwanQuote(symbol: string): Promise<TaiwanQuote | null>`、`searchTaiwanSecurities(query: string): Promise<StockWithWatchlistStatus[]>`、`getTaiwanHistory(symbol: string, days: number): Promise<TaiwanHistory>`、`getTaiwanDetails(symbol: string): Promise<TaiwanDetails | null>`。Reads 僅讀 repository；背景請求由 Task 4 明確入口觸發。Watchlist row 擴充 nullable price/change/changePercent/currency 與 `source`／`tradingDate`／`mode`，US rows 契約數值保留。
 
-- [ ] **1. 紅燈測試：** 無 Finnhub key 仍可搜台股／ETF；裸數字不當美股；中文命中；未同步且 DB 失敗不可宣稱無商品或觸發外部 API。自選 0050 有價格／TWD／日期，未知幣別不顯示 USD；quote null 與 zero change 區分。既有 2330.TW 加 TWSE:2330 不新增第二筆；其他使用者記錄不可讀／改。先回來的新搜尋結果不能被舊結果覆寫，composition Enter 不導航。
-- [ ] **2. 執行：** `npx vitest run lib/actions/taiwan-search.test.ts lib/actions/taiwan-watchlist.test.ts __tests__/taiwan-search-ui.test.tsx`；預期 FAIL。UI 使用 Node React renderer／可注入 request sequence pure helper，無需添加 DOM 套件。
-- [ ] **3. 實作：** 台股結果在 Finnhub 缺金鑰 return 前取得；非台股維持 Finnhub 路由，合併去重限制15筆。所有可觸發工作的 server action 保持已登入驗證；未初始化索引顯示準備中／同步未啟用，不拋 raw DB error。watchlist 查詢按 userId＋alias 判別，新增保存標準 symbol，已存在 alias 只回傳既有記錄而不再新增；新請求一律標準鍵 upsert 以既有唯一索引阻止並行重複，移除可作用於該使用者全部等價 alias。不批次改寫他人資料。`useLiveQuotes` 傳入排除台股的集合，避免15秒輪詢收盤；台股 row 以官方日期標示「收盤」，不以 Today 混淆。新增 pending search sequence／composition guard。
-- [ ] **4. 綠燈：** Step 2 PASS；mock 不允許台股觸發 Finnhub quote／company profile；跨市場混合自選 US／crypto 流程維持。有有效零漲跌時顯示 0，缺行情顯示 —。
-- [ ] **5. Commit：** `feat: search and price Taiwan watchlists from official data`。
+- [x] **1. 紅燈測試：** 無 Finnhub key 仍可搜台股／ETF；裸數字不當美股；中文命中；未同步且 DB 失敗不可宣稱無商品或觸發外部 API。自選 0050 有價格／TWD／日期，未知幣別不顯示 USD；quote null 與 zero change 區分。既有 2330.TW 加 TWSE:2330 不新增第二筆；其他使用者記錄不可讀／改。先回來的新搜尋結果不能被舊結果覆寫，composition Enter 不導航。
+- [x] **2. 執行：** `npx vitest run lib/actions/taiwan-search.test.ts lib/actions/taiwan-watchlist.test.ts __tests__/taiwan-search-ui.test.tsx`；預期 FAIL。UI 使用 Node React renderer／可注入 request sequence pure helper，無需添加 DOM 套件。
+- [x] **3. 實作：** 台股結果在 Finnhub 缺金鑰 return 前取得；非台股維持 Finnhub 路由，合併去重限制15筆。所有可觸發工作的 server action 保持已登入驗證；未初始化索引顯示準備中／同步未啟用，不拋 raw DB error。watchlist 查詢按 userId＋alias 判別，新增保存標準 symbol，已存在 alias 只回傳既有記錄而不再新增；新請求一律標準鍵 upsert 以既有唯一索引阻止並行重複，移除可作用於該使用者全部等價 alias。不批次改寫他人資料。`useLiveQuotes` 傳入排除台股的集合，避免15秒輪詢收盤；台股 row 以官方日期標示「收盤」，不以 Today 混淆。新增 pending search sequence／composition guard。
+- [x] **4. 綠燈：** Step 2 PASS；mock 不允許台股觸發 Finnhub quote／company profile；跨市場混合自選 US／crypto 流程維持。有有效零漲跌時顯示 0，缺行情顯示 —。
+- [x] **5. Commit：** `feat: search and price Taiwan watchlists from official data`。
 
 ### Task 6：指標與四因素切換官方日 K
 
@@ -151,11 +151,11 @@ type TaiwanDetails = {
 
 **Interfaces:** Produces `officialTaiwanCandles(symbol: string, days: number): Promise<CandleResult>`；`CandleSource.provider` 新增 twse／tpex。`CandleMarket` taiwan 分支帶 exchange，保留現有 kind 與 symbol；純解析共用 Task 1。來源結果保留已存在 failure reason，回填狀態由 getTaiwanHistory 另取，不任意更改其他市場 reason。
 
-- [ ] **1. 紅燈：** `TWSE:0050`、`0050.TW` 同 bar 序列；TPEX 不走 TWSE；800／400 返回各自日界切片；未完成當日排除；volume 完整。R N=126、251根不足、252根最低126樣本、378根完整252樣本；新上市 N/A；一個 malformed bar 不丟整個有效序列。台股沒有 SPY 请求／FinMind 请求，US／BINANCE 與 CG: 原測試仍通過。
-- [ ] **2. 執行：** `npx vitest run lib/taiwan/candles.test.ts lib/actions/candles-routing.test.ts __tests__/market-indicators.test.tsx`；預期官方台股 case FAIL。
-- [ ] **3. 實作：** 從持久 repo 取完整日 K 轉 RawCandles，延用 normalizeCandles／契約但以台股 adapter 做 OHLC完整驗證。`TAIWAN_CANDLE_PROVIDER=official|finmind` 為過渡回復旗標，預設 official，只有明確 finmind 時走舊 provider；不得官方錯誤自動 fallback。來源 labels 新增 TWSE／TPEx。指標與四因素讀取同 canonical 集合；partial 且有足夠資料可計算，無資料另顯同步狀態。來源失敗保留 failure reason，不能故意 return 空陣列掩飾 api-error。
-- [ ] **4. 綠燈：** Step 2 PASS，加跑 `npx vitest run lib/indicators/factor-periods.test.ts lib/actions/factor-preferences.actions.test.ts`，結果 PASS；不改公式或偏好 schema。
-- [ ] **5. Commit：** `feat: compute Taiwan indicators from official daily history`。
+- [x] **1. 紅燈：** `TWSE:0050`、`0050.TW` 同 bar 序列；TPEX 不走 TWSE；800／400 返回各自日界切片；未完成當日排除；volume 完整。R N=126、251根不足、252根最低126樣本、378根完整252樣本；新上市 N/A；一個 malformed bar 不丟整個有效序列。台股沒有 SPY 请求／FinMind 请求，US／BINANCE 與 CG: 原測試仍通過。
+- [x] **2. 執行：** `npx vitest run lib/taiwan/candles.test.ts lib/actions/candles-routing.test.ts __tests__/market-indicators.test.tsx`；預期官方台股 case FAIL。
+- [x] **3. 實作：** 從持久 repo 取完整日 K 轉 RawCandles，延用 normalizeCandles／契約但以台股 adapter 做 OHLC完整驗證。`TAIWAN_CANDLE_PROVIDER=official|finmind` 為過渡回復旗標，預設 official，只有明確 finmind 時走舊 provider；不得官方錯誤自動 fallback。來源 labels 新增 TWSE／TPEx。指標與四因素讀取同 canonical 集合；partial 且有足夠資料可計算，無資料另顯同步狀態。來源失敗保留 failure reason，不能故意 return 空陣列掩飾 api-error。
+- [x] **4. 綠燈：** Step 2 PASS，加跑 `npx vitest run lib/indicators/factor-periods.test.ts lib/actions/factor-preferences.actions.test.ts`，結果 PASS；不改公式或偏好 schema。
+- [x] **5. Commit：** `feat: compute Taiwan indicators from official daily history`。
 
 ### Task 7：台股收盤、圖表、ETF 詳情與同步狀態介面
 
@@ -163,11 +163,11 @@ type TaiwanDetails = {
 
 **Interfaces:** TaiwanHeader({security: TaiwanSecurity|null, quote: TaiwanQuote|null, symbol: string})；TaiwanChart({bars: TaiwanBar[], events: TaiwanEvent[]})；TaiwanDetails({details: TaiwanDetails|null})（type import 可改 alias 避免元件同名）；TaiwanHistoryStatus({symbol: string, initial: TaiwanHistoryStatus})。Actions 增加已登入 `getTaiwanPageData(symbol: string): Promise<{ security: TaiwanSecurity | null; quote: TaiwanQuote | null; history: TaiwanHistory; details: TaiwanDetails | null }>` 共用讀取及 `requestTaiwanHistoryAction(symbol, days): Promise<TaiwanHistoryStatus>` 包裝 Task 4，不曝露任意 jobKey 或上游 URL。
 
-- [ ] **1. 紅燈測試：** 0050 頁有官方收盤日／ETF 資訊／盤中補充來源，沒有公司 PE／1h 官方案例文案；6488 圖表 v 為精確股數；無資料顯明確原因；partial 顯 candleCount 與進度；disabled 提示同步尚未啟用；未知幣別不顯 USD。公告惡意 HTML 當純文字，外部網址拒絕 javascript:。
-- [ ] **2. 執行：** `npx vitest run __tests__/taiwan-stock-page.test.tsx __tests__/market-indicators.test.tsx`；預期新頁案例 FAIL。
-- [ ] **3. 實作：** 延用 Panel、cards、loading／重試模式與現有風格；原生 SVG 日 K 圖支援3月／1年／全部、價量與交易日 tooltip，固定日 K，空資料與只有一根不除零。保留獨立 TradingView symbol-info，文字「TradingView 報價，依其可用資料」；官方價格與時效獨立。台股分支不載原 financials／1h technicals／profile widget，改官方摘要；原新聞／Adanos 功能維持。回填只在明確已登入頁觸發一次，status client 在 tab 可見時每30秒讀 DB、最多20次，ready／error／disabled 停止，可手動重試；不能在每次輪詢重新排隊。停牌、分割與未調整價提示；DTO不含 Date。
-- [ ] **4. 綠燈＋手動驗收：** Step 2 PASS；本機 mock／已授權資料環境測 2330、0050、00400A、6488、00679B、外幣 ETF、小畫面、iframe 失效、failed job。記錄來源日期及 screenshot／觀察結果；環境未有資料不能拿空頁截圖當驗收完成。
-- [ ] **5. Commit：** `feat: show native official Taiwan market analysis`。
+- [x] **1. 紅燈測試：** 0050 頁有官方收盤日／ETF 資訊／盤中補充來源，沒有公司 PE／1h 官方案例文案；6488 圖表 v 為精確股數；無資料顯明確原因；partial 顯 candleCount 與進度；disabled 提示同步尚未啟用；未知幣別不顯 USD。公告惡意 HTML 當純文字，外部網址拒絕 javascript:。
+- [x] **2. 執行：** `npx vitest run __tests__/taiwan-stock-page.test.tsx __tests__/market-indicators.test.tsx`；預期新頁案例 FAIL。
+- [x] **3. 實作：** 延用 Panel、cards、loading／重試模式與現有風格；原生 SVG 日 K 圖支援3月／1年／全部、價量與交易日 tooltip，固定日 K，空資料與只有一根不除零。保留獨立 TradingView symbol-info，文字「TradingView 報價，依其可用資料」；官方價格與時效獨立。台股分支不載原 financials／1h technicals／profile widget，改官方摘要；原新聞／Adanos 功能維持。回填只在明確已登入頁觸發一次，status client 在 tab 可見時每30秒讀 DB、最多20次，ready／error／disabled 停止，可手動重試；不能在每次輪詢重新排隊。停牌、分割與未調整價提示；DTO不含 Date。
+- [x] **4. 綠燈＋手動驗收：** Step 2 PASS；本機 mock／已授權資料環境測 2330、0050、00400A、6488、00679B、外幣 ETF、小畫面、iframe 失效、failed job。記錄來源日期及 screenshot／觀察結果；環境未有資料不能拿空頁截圖當驗收完成。
+- [x] **5. Commit：** `feat: show native official Taiwan market analysis`。
 
 ### Task 8：整合驗收、設定與切換交付
 
@@ -175,11 +175,11 @@ type TaiwanDetails = {
 
 **Interfaces:** CLI、env、官方及過渡 rollback 說明引用 Tasks 3–7 已定義名稱，不新建第二套同步入口。
 
-- [ ] **1. 全範圍驗證：** `npm test`、`npm run lint`、`npm run build`；逐項記錄新失敗與既有失敗，外部 DB／env／網路限制時明確說明。所有新增 mock 測試不得需要真 key／正式 DB。`git diff --check` 無 whitespace error；檢查 staged diff 不含 temp、fixtures 完整全市場資料或憑證。
-- [ ] **2. 對照驗收：** 文件列出研究時已驗證的 endpoints，正式部署需驗的發布時間／配額／IP；給使用者最多5個頂層驗收步驟：免費額度與旗標、dry-run及指定範圍同步、搜尋與自選、日 K與指標、故障／來源日期。設定不預填費用未知的額度，沒有明確 budgets 時背景維持 disabled。零成本需要服務端超額計費關閉或可驗證的硬上限，本機工具不自動改方案。
-- [ ] **3. 回填成本與數值對照：** 記錄同日官方與過渡 FinMind 的 OHLCV 差異，以交易範圍／調整價／日期說明，不能為了數字一致改官方值。上櫃800日回填可能需數百個全日回應，確實列出 task／bytes dry-run 估算與每日上限造成的準備時間，不承諾一次開頁即完成。
-- [ ] **4. 完成範圍紀錄：** 更新 README data-source、免費同步、CLI與新 env、TradingView盤中限制；AGENTS.md 留≤10行量能範圍與官方日期案例。尚未部署／未實際同步、未驗收項目寫清楚。回復旗標保留至使用者部署驗收，移除舊 FinMind 為明確後續清理條件，不把未驗收當成已遷移完成。
-- [ ] **5. Commit：** `docs: document official Taiwan data setup and verification`；只本機提交，無 push／deploy。交付程式、計畫勾選狀態、測試結果、人工同步必要設定與尚未執行的正式驗收。
+- [x] **1. 全範圍驗證：** `npm test`、`npm run lint`、`npm run build`；逐項記錄新失敗與既有失敗，外部 DB／env／網路限制時明確說明。所有新增 mock 測試不得需要真 key／正式 DB。`git diff --check` 無 whitespace error；檢查 staged diff 不含 temp、fixtures 完整全市場資料或憑證。
+- [x] **2. 對照驗收：** 文件列出研究時已驗證的 endpoints，正式部署需驗的發布時間／配額／IP；給使用者最多5個頂層驗收步驟：免費額度與旗標、dry-run及指定範圍同步、搜尋與自選、日 K與指標、故障／來源日期。設定不預填費用未知的額度，沒有明確 budgets 時背景維持 disabled。零成本需要服務端超額計費關閉或可驗證的硬上限，本機工具不自動改方案。
+- [x] **3. 回填成本與數值對照：** 記錄同日官方與過渡 FinMind 的 OHLCV 差異，以交易範圍／調整價／日期說明，不能為了數字一致改官方值。上櫃800日回填可能需數百個全日回應，確實列出 task／bytes dry-run 估算與每日上限造成的準備時間，不承諾一次開頁即完成。
+- [x] **4. 完成範圍紀錄：** 更新 README data-source、免費同步、CLI與新 env、TradingView盤中限制；AGENTS.md 留≤10行量能範圍與官方日期案例。尚未部署／未實際同步、未驗收項目寫清楚。回復旗標保留至使用者部署驗收，移除舊 FinMind 為明確後續清理條件，不把未驗收當成已遷移完成。
+- [x] **5. Commit：** `docs: document official Taiwan data setup and verification`；只本機提交，無 push／deploy。交付程式、計畫勾選狀態、測試結果、人工同步必要設定與尚未執行的正式驗收。
 
 ## 計畫自查
 
