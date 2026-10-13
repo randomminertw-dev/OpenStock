@@ -7,6 +7,14 @@ vi.mock('@/lib/actions/finnhub.actions', () => ({
     getNews: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('@/lib/actions/adanos.actions', () => ({ getStockSentimentInsights: vi.fn().mockResolvedValue(null) }));
+vi.mock('@/lib/actions/factor-preferences.actions', () => ({
+    getFactorPreference: vi.fn(async (symbol: string) => {
+        const { defaultFactorPreference, marketForSymbol } = await import('@/lib/indicators/factor-periods');
+        const market = marketForSymbol(symbol);
+        return market ? { preference: defaultFactorPreference(market), readError: false } : null;
+    }),
+    saveFactorPreference: vi.fn(),
+}));
 // Unrelated authenticated header and third-party iframe are outside the indicator flow.
 vi.mock('@/components/stocks/StockHeader', () => ({ default: () => null, StockHeaderSkeleton: () => null }));
 vi.mock('@/components/TradingViewWidget', () => ({ default: () => null }));
@@ -211,6 +219,17 @@ describe('indicator assessments across markets', () => {
 });
 
 describe('rendered stock details', () => {
+    it('keeps factors visible when 59 bars cannot produce the 57-vote assessment', async () => {
+        vi.stubGlobal('fetch', marketFetch(59));
+        const { default: Dashboard } = await import('@/components/stocks/IndicatorDashboard');
+        const html = renderToStaticMarkup(await resolveServerTree(await Dashboard({ symbol: '2330.TW' })));
+        expect(html).toContain('資料不足');
+        expect(html).toContain('四因素評分');
+        expect(html).toContain('現行預設');
+        expect(html).toContain('暫時套用');
+        expect(html).not.toContain('IDS-Period');
+    });
+
     it.each(['BINANCE:BTCUSDT', '2330.TW', 'CG:bitcoin'])('shows voting, factors and IDS for %s', async (symbol) => {
         const fetcher = marketFetch();
         vi.stubGlobal('fetch', fetcher);
@@ -220,6 +239,8 @@ describe('rendered stock details', () => {
         expect(html).toContain('四因素評分');
         expect(html).toContain('IDS-Period');
         expect(html).toContain('資料日期');
+        expect(html).toContain('跨市場不可直接比較');
+        expect(html).toContain('樣本');
         if (symbol === '2330.TW') expect(html).toContain('未還原');
         if (symbol.startsWith('BINANCE:')) expect(html).toContain('BTCUSDT');
         // One request for each market's candles across the concurrently rendered panels.
@@ -233,4 +254,34 @@ describe('rendered stock details', () => {
         expect(html).toContain('行情服務暫時無法使用');
         expect(html).not.toContain('<h3>資料不足</h3>');
     });
+
+    it('shows a preference validation failure as a settings error', async () => {
+        const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const html = renderToStaticMarkup(<FactorSettings symbol="AAPL"
+            initialPreference={defaultFactorPreference('us')}
+            initialResponse={{ assessment: null, reason: 'invalid-preference', candleCount: 0 }}
+            readError={false} />);
+        expect(html).toContain('四因素設定無效');
+        expect(html).not.toContain('行情服務暫時無法使用');
+        expect(html).toContain('grid grid-cols-2');
+        expect(html).toContain('min-h-11');
+        expect(html).toContain('text-[16px]');
+    });
+
+    it('keeps international factors fixed at daily n14 without settings', async () => {
+        const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
+        const html = renderToStaticMarkup(<FactorSettings symbol="VOD.L" initialPreference={null}
+            initialResponse={{ assessment: null, reason: 'no-data', candleCount: 0 }} readError={false} />);
+        expect(html).toContain('國際市場沿用固定日 K、四因素 n=14');
+        expect(html).not.toContain('儲存市場偏好');
+    });
 });
+
+// Browser acceptance cases (require a signed-in local app and live providers):
+// 1. BINANCE:BTCUSDT: set T/M/V/R independently, switch 4h→8h→12h→1d; each N stays unchanged.
+// 2. Preview updates only this page; navigating to CG:bitcoin still reads the stored crypto preference.
+// 3. Save crypto settings, then open CG:bitcoin and confirm the same market preference; a failed save preserves inputs.
+// 4. 57 votes, IDS-Indicator, IDS-Period and PeriodExplorer keep their daily values through previews.
+// 5. Check AAPL, 2330.TW, BINANCE:BTCUSDT and CG:bitcoin at 320px/375px: no horizontal scroll;
+//    factors/inputs two columns, intervals 2×2, presets three equal columns, controls ≥44px, number text ≥16px.

@@ -1,13 +1,15 @@
 import { TrendingUp, TrendingDown, Minus, Scale, Newspaper, ChevronDown } from 'lucide-react';
-import { getFactorAssessment, getIndicatorAssessmentWithReason } from '@/lib/actions/indicators.actions';
+import { getFourFactorAssessmentWithReason, getIndicatorAssessmentWithReason, getPeriodAssessment } from '@/lib/actions/indicators.actions';
+import { getFactorPreference } from '@/lib/actions/factor-preferences.actions';
+import { defaultFactorPreference, marketForSymbol } from '@/lib/indicators/factor-periods';
 import { getNews } from '@/lib/actions/finnhub.actions';
 import { scoreNewsSentiment } from '@/lib/factors/scoring';
 import { cn } from '@/lib/utils';
 import IndicatorTable, { CATEGORY_LABEL } from './IndicatorTable';
-import FactorCards from './FactorCards';
+import FactorSettings from './FactorSettings';
 import PeriodExplorer from './PeriodExplorer';
 import type { Category, IDSResult, IndicatorResult } from '@/lib/indicators/types';
-import type { IDSFactorResult, IDSPeriodResult } from '@/lib/indicators/ids';
+import type { IDSPeriodResult } from '@/lib/indicators/ids';
 
 const DIRECTION_META: Record<IDSResult['direction'], { label: string; symbol: string; pill: string; text: string; Icon: typeof TrendingUp }> = {
     bullish: { label: '看漲', symbol: '▲', pill: 'pill is-up', text: 'text-up', Icon: TrendingUp },
@@ -145,15 +147,13 @@ async function NewsSentimentCard({ symbol }: { symbol: string }) {
     );
 }
 
-/** 三層 IDS 並排：IDS-Period / IDS-Indicator / IDS-Factor，各層獨立解讀。 */
+/** 固定日 K 的兩層 IDS；可設定的 IDS-Factor 隨四因素更新。 */
 function MultiLevelIds({
     ids,
     idsPeriod,
-    idsFactor,
 }: {
-    ids: IDSResult;
-    idsPeriod: Record<string, IDSPeriodResult>;
-    idsFactor: IDSFactorResult;
+    ids: IDSResult | null;
+    idsPeriod: Record<string, IDSPeriodResult> | null;
 }) {
     return (
         <div className="border-t border-line px-3 py-2.5">
@@ -161,8 +161,8 @@ function MultiLevelIds({
             <p className="mt-0.5 text-[11.5px] leading-snug text-faint">
                 各層獨立解讀，不合成單一信心分數
             </p>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-                <div className="rounded-xl border border-line px-2.5 py-2">
+            <div className={`mt-2 grid gap-2 ${ids && idsPeriod ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {idsPeriod && <div className="rounded-xl border border-line px-2.5 py-2">
                     <p className="text-[11px] font-bold text-foreground">IDS-Period</p>
                     <p className="text-[10.5px] text-faint">期間內分歧</p>
                     <ul className="mt-1.5 space-y-1">
@@ -175,84 +175,84 @@ function MultiLevelIds({
                             </li>
                         ))}
                     </ul>
-                </div>
-                <div className="rounded-xl border border-line px-2.5 py-2">
+                </div>}
+                {ids && <div className="rounded-xl border border-line px-2.5 py-2">
                     <p className="text-[11px] font-bold text-foreground">IDS-Indicator</p>
                     <p className="text-[10.5px] text-faint">57 指標分歧</p>
                     <p className="num mt-1.5 text-[22px] font-bold leading-none text-foreground">
                         {fmtPct(ids.idsPct)}
                     </p>
-                </div>
-                <div className="rounded-xl border border-line px-2.5 py-2">
-                    <p className="text-[11px] font-bold text-foreground">IDS-Factor</p>
-                    <p className="text-[10.5px] text-faint">四因素分歧</p>
-                    <p className="num mt-1.5 text-[22px] font-bold leading-none text-foreground">
-                        {fmtPct(idsFactor.idsPct)}
-                    </p>
-                    <p className="num mt-1 text-[10.5px] text-faint">
-                        n={idsFactor.validCount}/3{idsFactor.validCount === 1 ? '・證據不足' : ''}
-                    </p>
-                </div>
+                </div>}
             </div>
         </div>
     );
 }
 
 export default async function IndicatorDashboard({ symbol }: { symbol: string }) {
-    const [{ assessment, reason, candleCount }, factorAssessment] = await Promise.all([
+    const market = marketForSymbol(symbol);
+    let preferenceResult: Awaited<ReturnType<typeof getFactorPreference>> = null;
+    if (market) {
+        try {
+            preferenceResult = await getFactorPreference(symbol);
+        } catch {
+            preferenceResult = { preference: defaultFactorPreference(market), readError: true };
+        }
+    }
+    const [{ assessment, reason, candleCount }, factorResponse, periodAssessment] = await Promise.all([
         getIndicatorAssessmentWithReason(symbol),
-        getFactorAssessment(symbol),
+        getFourFactorAssessmentWithReason(symbol, preferenceResult?.preference ?? defaultFactorPreference('us')),
+        getPeriodAssessment(symbol),
     ]);
-    if (!assessment) {
-        const messages = {
+    const messages = {
             'api-error': { title: '行情服務暫時無法使用', message: '歷史行情讀取失敗，請稍後重新整理再試。' },
             'missing-config': { title: '行情來源設定缺失', message: '歷史行情服務尚未設定完成，或憑證與權限需要確認，請聯絡管理者。' },
             'unsupported-symbol': { title: '尚未支援此標的', message: '目前的歷史行情來源無法辨識或支援此標的。' },
             'no-data': { title: '查無歷史資料', message: '行情來源未提供此標的的日 K 線資料。' },
             'insufficient-data': { title: '資料不足', message: `目前取得 ${candleCount} 根有效日 K 線，至少需要 60 根才能開始計算技術指標。` },
         };
+    const voteFailure = !assessment ? (() => {
         const { title, message } = messages[reason ?? 'api-error'];
-        return (
-            <div className="empty-state py-10">
+        return <div className="empty-state py-10">
                 <span className="empty-icon"><Scale className="size-5" /></span>
                 <h3>{title}</h3>
                 <p className="max-w-80 text-[13px]">
                     {message}
                 </p>
-            </div>
-        );
-    }
+            </div>;
+    })() : null;
 
-    const { results, ids, asof, source } = assessment;
+    const { results, ids, asof, source } = assessment ?? {};
     const sourceNames = { alpaca: 'Alpaca', binance: 'Binance', finmind: 'FinMind', finnhub: 'Finnhub' };
-    const dataDate = new Date(asof).toLocaleDateString('sv-SE', { timeZone: source?.timeZone ?? 'UTC' });
+    const dataDate = asof ? new Date(asof).toLocaleDateString('sv-SE', { timeZone: source?.timeZone ?? 'UTC' }) : null;
 
     return (
         <div className="flex flex-col">
-            <ResultCard ids={ids} />
-            <CategoryOverview results={results} />
-            <IndicatorTable results={results} />
-            {factorAssessment && (
+            {voteFailure}
+            {assessment && ids && results && (
                 <>
-                    <FactorCards factors={factorAssessment.factors} />
-                    <MultiLevelIds
-                        ids={ids}
-                        idsPeriod={factorAssessment.idsPeriod}
-                        idsFactor={factorAssessment.idsFactor}
-                    />
+                    <ResultCard ids={ids} />
+                    <CategoryOverview results={results} />
+                    <IndicatorTable results={results} />
+                </>
+            )}
+            <FactorSettings symbol={symbol} initialPreference={preferenceResult?.preference ?? null}
+                initialResponse={factorResponse} readError={preferenceResult?.readError ?? false} />
+            {(ids || periodAssessment) && <MultiLevelIds ids={ids ?? null} idsPeriod={periodAssessment?.idsPeriod ?? null} />}
+            {periodAssessment && (
+                <>
                     <details className="group border-t border-line">
                         <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-hover/50 [&::-webkit-details-marker]:hidden">
                             <span className="text-[13px] font-bold text-foreground">期間探索</span>
                             <ChevronDown className="size-4 text-faint transition-transform group-open:rotate-180" />
                         </summary>
-                        <PeriodExplorer variants={factorAssessment.variants} />
+                        <PeriodExplorer variants={periodAssessment.variants} />
                     </details>
                 </>
             )}
             <NewsSentimentCard symbol={symbol} />
             <p className="border-t border-line px-3 py-2.5 text-[11.5px] leading-relaxed text-faint">
                 技術指標投票僅供參考，不構成投資建議。
-                <span className="num">資料日期 {dataDate}</span>
+                {dataDate && <span className="num">資料日期 {dataDate}</span>}
                 {source && (
                     <span> · {sourceNames[source.provider]} · {source.symbol}
                         {source.priceBasis === 'unadjusted' ? ' · 盤後日 K（未還原股價）' : ' · 日 K'}

@@ -1,6 +1,7 @@
 import { TrendingUp, Minus, Zap, BarChart3, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FactorId, FactorScore, FourFactors } from '@/lib/indicators/factors';
+import type { FourFactorAssessment } from '@/lib/actions/indicators.actions';
 
 const FACTOR_META: Record<FactorId, { name: string; hint: string; Icon: typeof TrendingUp }> = {
     T: { name: '趨勢', hint: '趨勢強度與方向', Icon: TrendingUp },
@@ -61,11 +62,15 @@ function FactorCard({ factor }: { factor: FactorScore }) {
                     <span className="ml-1.5">{factor.formulaVersion}</span>
                 </p>
             )}
+            {isRisk && factor.sampleCount !== undefined && (
+                <p className="num mt-1 text-[11px] text-faint">R 分位樣本 {factor.sampleCount}</p>
+            )}
         </div>
     );
 }
 
-export default function FactorCards({ factors }: { factors: FourFactors }) {
+export default function FactorCards({ factors, assessment }: { factors: FourFactors; assessment?: FourFactorAssessment }) {
+    const timeZone = assessment?.source?.timeZone ?? 'UTC';
     return (
         <div className="px-3 pb-1 pt-3">
             <div className="flex items-center justify-between gap-2">
@@ -81,6 +86,11 @@ export default function FactorCards({ factors }: { factors: FourFactors }) {
             <p className="mt-2 text-[11.5px] leading-relaxed text-faint">
                 標準化技術分數，非預測機率。T / M / V 正值偏多、負值偏空；R 為波動風險強度（0–100），不代表方向。
             </p>
+            {assessment && (
+                <p className="num mt-1 text-[11px] leading-relaxed text-faint">
+                    四因素週期 {assessment.interval} · asof {assessment.asof} · {timeZone}。跨市場不可直接比較。
+                </p>
+            )}
         </div>
     );
 }
