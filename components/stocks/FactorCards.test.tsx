@@ -10,7 +10,7 @@ function assessment(): FourFactorAssessment {
             T: { id: 'T', score: 2.5, n: 42, formulaVersion: 'sma-spread-atr-v2', reason: '(SMA100 110 − SMA400 105) ÷ ATR(42) 2 = 2.50 倍 ATR' },
             M: { id: 'M', score: 20, n: 30, formulaVersion: 'wilder-rma-v1', reason: 'RSI(30) = 60，M = 2 × RSI − 100 = 20' },
             V: { id: 'V', score: -15, n: 14, formulaVersion: 'wilder-rma-v1', reason: 'CMF(14) = -0.15，V = 100 × CMF = -15' },
-            R: { id: 'R', score: 80, n: 21, formulaVersion: 'wilder-rma-v1', reason: 'ATR%(21) = 4%，為近 252 根歷史的第 80 百分位，R = 80', sampleCount: 252 },
+            R: { id: 'R', score: 79.8804780876494, n: 21, formulaVersion: 'wilder-rma-v1', reason: 'ATR%(21) = 4%，為近 252 根歷史的第 79.9 百分位，R = 79.9', sampleCount: 252 },
         },
         idsFactor: { idsPct: null, upPct: null, downPct: null, neutralPct: null, validCount: 0 },
         asof: '2026-10-13T00:00:00.000Z',
@@ -35,7 +35,8 @@ describe('FactorCards formula explanations', () => {
         expect(html).toContain('N=42 根 8h K 線');
         expect(html).toContain('RSI(30) = 60');
         expect(html).toContain('CMF(14) = -0.15');
-        expect(html).toContain('第 80 百分位');
+        expect(html).toContain('第 79.9 百分位');
+        expect(html).toContain('100 × (201.5 − 1) ÷ (252 − 1) ≈ 79.9');
         expect(html).toContain('不代表漲跌方向或預測機率');
     });
 

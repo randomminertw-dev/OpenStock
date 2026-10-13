@@ -24,6 +24,9 @@ function FactorCard({ factor, interval }: { factor: FactorScore; interval: FourF
     const meta = FACTOR_META[factor.id];
     const isRisk = factor.id === 'R';
     const missing = factor.score === null || !Number.isFinite(factor.score);
+    const riskRank = isRisk && !missing && factor.sampleCount !== undefined && factor.sampleCount > 1
+        ? 1 + factor.score! * (factor.sampleCount - 1) / 100
+        : null;
 
     // T/M/V 用方向配色；R 一律用琥珀中性色（不代表方向）
     const scoreClass = isRisk
@@ -100,6 +103,11 @@ function FactorCard({ factor, interval }: { factor: FactorScore; interval: FourF
                     )}
                     <p className="font-semibold text-foreground">本次計算</p>
                     <p className="break-words">{factor.reason}</p>
+                    {riskRank !== null && (
+                        <p className="num break-words">
+                            100 × ({riskRank.toFixed(1)} − 1) ÷ ({factor.sampleCount} − 1) ≈ {factor.score!.toFixed(1)}
+                        </p>
+                    )}
                 </div>
             </details>
         </div>
