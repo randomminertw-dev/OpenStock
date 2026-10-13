@@ -7,6 +7,7 @@ export interface FactorPreferenceDocument extends Document, FactorPreference {
 
 const FactorPreferenceSchema = new Schema<FactorPreferenceDocument>(
     {
+        version: { type: Number, required: false },
         userId: { type: String, required: true },
         market: { type: String, required: true, enum: ['us', 'taiwan', 'crypto'] },
         preset: { type: String, required: true, enum: ['legacy', 'short', 'medium', 'long', 'custom'] },

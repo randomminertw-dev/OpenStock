@@ -4,12 +4,12 @@ import { connectToDatabase } from '@/database/mongoose';
 import { FactorPreferenceModel } from '@/database/models/factor-preference.model';
 import { requireUserId } from '@/lib/better-auth/auth';
 import {
-    defaultFactorPreference, marketForSymbol, parseFactorPreference,
+    defaultFactorPreference, marketForSymbol, migrateLegacyFactorPreference, parseFactorPreference,
     type FactorPreference,
 } from '@/lib/indicators/factor-periods';
 
 export async function getFactorPreference(symbol: string): Promise<{
-    preference: FactorPreference; readError: boolean; saved: boolean;
+    preference: FactorPreference; readError: boolean; saved: boolean; migrationRequired: boolean;
 } | null> {
     const market = marketForSymbol(symbol);
     if (!market) return null;
@@ -17,13 +17,17 @@ export async function getFactorPreference(symbol: string): Promise<{
     try {
         await connectToDatabase();
         const stored = await FactorPreferenceModel.findOne({ userId, market });
+        const migrationRequired = Boolean(stored && stored.version !== 2);
         return {
-            preference: stored ? parseFactorPreference(market, stored) : defaultFactorPreference(market),
+            preference: stored
+                ? migrationRequired ? migrateLegacyFactorPreference(market, stored) : parseFactorPreference(market, stored)
+                : defaultFactorPreference(market),
             readError: false,
-            saved: Boolean(stored),
+            saved: Boolean(stored) && !migrationRequired,
+            migrationRequired,
         };
     } catch {
-        return { preference: defaultFactorPreference(market), readError: true, saved: false };
+        return { preference: defaultFactorPreference(market), readError: true, saved: false, migrationRequired: false };
     }
 }
 

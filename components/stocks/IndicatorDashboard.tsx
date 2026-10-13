@@ -195,7 +195,7 @@ export default async function IndicatorDashboard({ symbol }: { symbol: string })
         try {
             preferenceResult = await getFactorPreference(symbol);
         } catch {
-            preferenceResult = { preference: defaultFactorPreference(market), readError: true, saved: false };
+            preferenceResult = { preference: defaultFactorPreference(market), readError: true, saved: false, migrationRequired: false };
         }
     }
     const [{ assessment, reason, candleCount }, factorResponse, periodAssessment] = await Promise.all([

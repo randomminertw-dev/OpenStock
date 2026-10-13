@@ -364,7 +364,7 @@ describe('rendered stock details', () => {
     ] as const)('renders each crypto factor coverage at %s', async (interval, coverage) => {
         const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
         const html = renderToStaticMarkup(<FactorSettings symbol="BINANCE:BTCUSDT"
-            initialPreference={{ market: 'crypto', preset: 'custom', periods: { T: 5, M: 10, V: 30, R: 180 }, interval }}
+            initialPreference={{ version: 2, market: 'crypto', preset: 'custom', periods: { T: 5, M: 10, V: 30, R: 180 }, interval }}
             initialResponse={{ assessment: null, reason: 'no-data', candleCount: 0 }} readError={false} initialSaved />);
         const visibleText = html.replace(/<[^>]+>/g, '');
         expect(visibleText).toContain('草稿：自訂');
