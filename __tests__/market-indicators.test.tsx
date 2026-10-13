@@ -219,6 +219,24 @@ describe('indicator assessments across markets', () => {
 });
 
 describe('rendered stock details', () => {
+    it('shows the selected period value and direction separately from the comparison rows', async () => {
+        const { default: PeriodExplorer } = await import('@/components/stocks/PeriodExplorer');
+        const variants = {
+            RSI: [
+                { variantId: 'RSI__n7__wilder_v1', indicatorId: 'RSI' as const, n: 7, value: 42.5, signal: 0 as const },
+                { variantId: 'RSI__n14__wilder_v1', indicatorId: 'RSI' as const, n: 14, value: 28.25, signal: 1 as const },
+            ],
+        };
+        const html = renderToStaticMarkup(<PeriodExplorer variants={variants} />);
+        const visibleText = html.replace(/<[^>]*>/g, '');
+        expect(visibleText).toContain('目前選取：RSI(14)');
+        expect(visibleText).toContain('28.25');
+        expect(visibleText).toContain('看漲');
+        expect(visibleText).toContain('僅比較不同期間，不改變四因素、57 項投票或 IDS');
+        expect(visibleText).toContain('n=7');
+        expect(visibleText).toContain('42.50');
+    });
+
     function factorResponse(n: number) {
         const factor = (id: 'T' | 'M' | 'V' | 'R') => ({ id, score: n, n, formulaVersion: 'test', reason: '' });
         return {
@@ -338,13 +356,33 @@ describe('rendered stock details', () => {
 
         const { default: Dashboard } = await import('@/components/stocks/IndicatorDashboard');
         const html = renderToStaticMarkup(await resolveServerTree(await Dashboard({ symbol: '2330.TW' })));
-        expect(html).toContain('全中立（5/5）');
-        expect(html).toContain('不適用（無方向）');
-        expect(html).toContain('資料不足（0/5）');
+        expect(html).toContain('全中立（5/5 有效期間）');
+        expect(html).toContain('不適用（只量波幅；5/5 有效期間）');
+        expect(html).toContain('資料不足（0/5 有效期間）');
+        expect(html).toContain('N=7／14／20／21／28');
+        expect(html).toContain('不是看漲票數');
+        expect(html).toContain('不是指標值或買賣機率');
         expect(html).toContain('ATR');
         const breadthCard = html.match(/<details aria-label="市場廣度指標明細"[\s\S]*?<\/details>/)?.[0];
         expect(breadthCard).toContain('無有效指標');
         expect(breadthCard).not.toContain('中性');
+    });
+
+    it('labels factor disagreement as directional votes from three factors, not four risk factors', async () => {
+        const { default: FactorSettings } = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const response = factorResponse(21);
+        response.assessment.idsFactor = { idsPct: 66.6666667, upPct: 66.6666667, downPct: 33.3333333, neutralPct: 0, validCount: 3 };
+        const html = renderToStaticMarkup(<FactorSettings symbol="AAPL"
+            initialPreference={defaultFactorPreference('us')}
+            initialResponse={response} readError={false} initialSaved={false} />);
+        const visibleText = html.replace(/<[^>]*>/g, '');
+        expect(html).toContain('IDS-Factor · 方向性三因素分歧');
+        expect(html).toContain('66.7%');
+        expect(visibleText).toContain('有效因素 3/3');
+        expect(visibleText).toContain('看漲 2 · 看跌 1 · 中立 0');
+        expect(html).toContain('R 波動風險不投方向票');
+        expect(html).toContain('不是信心或買進機率');
     });
 
     it('lists six category names and their constituent indicators in expandable cards', async () => {

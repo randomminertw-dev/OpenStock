@@ -36,10 +36,11 @@ function fmtPct(v: number | null, digits = 1): string {
 }
 
 function periodStatus(id: (typeof PERIOD_IDS)[number], result: IDSPeriodResult | undefined): string {
-    if (result?.idsPct !== null && result?.idsPct !== undefined) return fmtPct(result.idsPct);
-    if (!result || result.validCount === 0) return `資料不足（0/${PERIOD_CANDIDATES.length}）`;
-    if (id === 'ATR') return '不適用（無方向）';
-    return `全中立（${result.validCount}/${PERIOD_CANDIDATES.length}）`;
+    const valid = `${result?.validCount ?? 0}/${PERIOD_CANDIDATES.length} 有效期間`;
+    if (result?.idsPct !== null && result?.idsPct !== undefined) return `${fmtPct(result.idsPct)} 分歧（${valid}）`;
+    if (!result || result.validCount === 0) return `資料不足（${valid}）`;
+    if (id === 'ATR') return `不適用（只量波幅；${valid}）`;
+    return `全中立（${valid}）`;
 }
 
 function ResultCard({ ids }: { ids: IDSResult }) {
@@ -182,22 +183,23 @@ function MultiLevelIds({
         <div className="border-t border-line px-3 py-2.5">
             <p className="kicker">三層分歧分數 IDS</p>
             <p className="mt-0.5 text-[11.5px] leading-snug text-faint">
-                各層獨立解讀，不合成單一信心分數
+                各層票源不同，獨立解讀；不相加，也不是信心分數。
             </p>
-            <div className={`mt-2 grid gap-2 ${ids && idsPeriod ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            <div className={`mt-2 grid gap-2 ${ids && idsPeriod ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
                 {idsPeriod && <div className="rounded-xl border border-line px-2.5 py-2">
-                    <p className="text-[11px] font-bold text-foreground">IDS-Period</p>
-                    <p className="text-[10.5px] text-faint">期間內分歧</p>
+                    <p className="text-[11px] font-bold text-foreground">IDS-Period · 同一指標的期間分歧</p>
+                    <p className="mt-0.5 text-[10.5px] leading-relaxed text-faint">固定日 K，比較各指標 N=7／14／20／21／28；5/5 是有效期間數，不是看漲票數，也不隨四因素設定變動。</p>
                     <ul className="mt-1.5 space-y-1">
                         {PERIOD_IDS.map((id) => (
-                            <li key={id} className="flex items-center justify-between gap-1 text-[11px]">
-                                <span className="text-faint">{PERIOD_LABEL[id]}</span>
-                                <span className="num font-bold text-foreground">
+                            <li key={id} className="flex items-start justify-between gap-2 text-[11px]">
+                                <span className="shrink-0 text-faint">{PERIOD_LABEL[id]}</span>
+                                <span className="min-w-0 text-right font-bold leading-snug text-foreground">
                                     {periodStatus(id, idsPeriod[id])}
                                 </span>
                             </li>
                         ))}
                     </ul>
+                    <p className="mt-2 text-[10.5px] leading-relaxed text-faint">分歧百分比比較看漲與看跌方向，不是指標值或買賣機率；全中立表示有資料但沒有方向票。ATR 只量波幅、沒有漲跌方向，因此不適用；資料不足才表示無法計算。</p>
                 </div>}
                 {ids && <div className="rounded-xl border border-line px-2.5 py-2">
                     <p className="text-[11px] font-bold text-foreground">IDS-Indicator</p>

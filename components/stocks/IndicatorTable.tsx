@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { ChevronDown, TrendingUp, TrendingDown, Minus, Copy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CATEGORY_LABEL } from '@/lib/indicators/category-labels';
 import type { IndicatorResult, Signal } from '@/lib/indicators/types';
@@ -19,6 +19,13 @@ function formatValue(v: number | null): string {
     if (abs >= 100) return v.toFixed(1);
     if (abs >= 1) return v.toFixed(2);
     return v.toFixed(4);
+}
+
+export function formatIndicatorCopyText(results: IndicatorResult[]): string {
+    return results.map((result) => {
+        const value = result.value === null || result.signal === null ? 'N/A' : formatValue(result.value);
+        return `${CATEGORY_LABEL[result.category]}｜${result.name}：${value}`;
+    }).join('\n');
 }
 
 function IndicatorRow({ result }: { result: IndicatorResult }) {
@@ -52,24 +59,44 @@ function IndicatorRow({ result }: { result: IndicatorResult }) {
 
 export default function IndicatorTable({ results }: { results: IndicatorResult[] }) {
     const [expanded, setExpanded] = useState(false);
+    const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const validCount = results.filter((r) => r.signal !== null).length;
+
+    async function copyValues() {
+        try {
+            if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+            await navigator.clipboard.writeText(formatIndicatorCopyText(results));
+            setCopyStatus('success');
+        } catch {
+            setCopyStatus('error');
+        }
+    }
 
     return (
         <div className="border-t border-line">
-            <button
-                type="button"
-                onClick={() => setExpanded((v) => !v)}
-                className="flex w-full items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-hover/50"
-                aria-expanded={expanded}
-            >
-                <span className="text-[13px] font-bold text-foreground">
-                    57 項指標明細{' '}
-                    <span className="num font-semibold text-faint">
-                        ({validCount}/{results.length} 有效)
+            <div className="flex flex-wrap items-center gap-1 px-3 py-1">
+                <button
+                    type="button"
+                    onClick={() => setExpanded((v) => !v)}
+                    className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-md py-1 text-left transition-colors hover:bg-hover/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                    aria-expanded={expanded}
+                >
+                    <span className="text-[13px] font-bold text-foreground">
+                        57 項指標明細{' '}
+                        <span className="num font-semibold text-faint">
+                            ({validCount}/{results.length} 有效)
+                        </span>
                     </span>
-                </span>
-                <ChevronDown className={cn('size-4 text-faint transition-transform', expanded && 'rotate-180')} />
-            </button>
+                    <ChevronDown className={cn('size-4 shrink-0 text-faint transition-transform', expanded && 'rotate-180')} />
+                </button>
+                <button type="button" onClick={copyValues} aria-label="複製 57 項指標數值"
+                    className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-md border border-line px-2.5 text-[12px] font-semibold text-foreground transition-colors hover:border-gold/50 hover:text-gold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
+                    <Copy className="size-3.5" aria-hidden="true" />複製數值
+                </button>
+            </div>
+            {copyStatus !== 'idle' && <p role="status" aria-live="polite" className={cn('px-3 pb-2 text-[11px]', copyStatus === 'success' ? 'text-up' : 'text-warn')}>
+                {copyStatus === 'success' ? `已複製 ${results.length} 項指標數值。` : '複製失敗，請確認瀏覽器允許剪貼簿存取。'}
+            </p>}
             {expanded && (
                 <ul className="max-h-96 overflow-y-auto border-t border-line">
                     {results.map((r) => (

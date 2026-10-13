@@ -80,6 +80,10 @@ const FAILURE: Record<AssessmentFailureReason, string> = {
     'insufficient-data': '四因素歷史資料不足。',
 };
 
+function voteCount(pct: number | null, validCount: number): number {
+    return Math.round((pct ?? 0) * validCount / 100);
+}
+
 export default function FactorSettings({ symbol, initialPreference, initialResponse, readError, initialSaved, migrationRequired = false }: {
     symbol: string;
     initialPreference: FactorPreference | null;
@@ -266,11 +270,16 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
                 <>
                     <FactorCards factors={shown.assessment.factors} assessment={shown.assessment} />
                     <div className="border-t border-line px-3 py-2.5">
-                        <p className="text-[12px] font-bold text-foreground">IDS-Factor · 四因素分歧</p>
+                        <p className="text-[12px] font-bold text-foreground">IDS-Factor · 方向性三因素分歧</p>
                         <p className="num mt-1 text-[22px] font-bold leading-none text-foreground">
                             {shown.assessment.idsFactor.idsPct === null ? 'N/A' : `${shown.assessment.idsFactor.idsPct.toFixed(1)}%`}
                         </p>
-                        <p className="num mt-1 text-[11px] text-faint">n={shown.assessment.idsFactor.validCount}/3{shown.assessment.idsFactor.validCount === 1 ? ' · 證據不足' : ''}</p>
+                        <p className="mt-1 text-[11px] text-faint">有效因素 <span className="num">{shown.assessment.idsFactor.validCount}/3</span>（含中立）{shown.assessment.idsFactor.validCount === 1 ? ' · 證據不足' : ''}</p>
+                        <p className="mt-1 text-[11px] text-faint">
+                            方向票：看漲 <span className="num">{voteCount(shown.assessment.idsFactor.upPct, shown.assessment.idsFactor.validCount)}</span> · 看跌 <span className="num">{voteCount(shown.assessment.idsFactor.downPct, shown.assessment.idsFactor.validCount)}</span> · 中立 <span className="num">{voteCount(shown.assessment.idsFactor.neutralPct, shown.assessment.idsFactor.validCount)}</span>
+                        </p>
+                        <p className="mt-1 text-[11px] leading-relaxed text-faint">T 趨勢、M 動能、V 量能各一票；R 波動風險不投方向票。分歧越高代表方向越不一致，不是信心或買進機率。</p>
+                        {shown.assessment.idsFactor.idsPct === null && <p className="mt-1 text-[11px] text-faint">沒有看漲或看跌票，無法計算方向分歧。</p>}
                     </div>
                 </>
             ) : (

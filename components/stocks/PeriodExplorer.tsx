@@ -39,6 +39,10 @@ export default function PeriodExplorer({ variants }: { variants: Record<string, 
     const [period, setPeriod] = useState<number>(DEFAULT_PERIOD);
 
     const rows = [...(variants[tab] ?? [])].sort((a, b) => a.n - b.n);
+    const selected = rows.find((row) => row.n === period);
+    const selectedDirection = !selected || selected.value === null || selected.signal === null
+        ? '資料不足'
+        : tab === 'ATR' ? '無方向（只量波幅）' : SIGNAL_META[selected.signal].label;
 
     return (
         <div className="border-t border-line">
@@ -77,7 +81,7 @@ export default function PeriodExplorer({ variants }: { variants: Record<string, 
                         onClick={() => setPeriod(n)}
                         aria-pressed={period === n}
                         className={cn(
-                            'num rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors',
+                            'num min-h-11 rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold',
                             period === n
                                 ? 'border-gold bg-gold/15 text-gold'
                                 : 'border-line text-faint hover:border-gold/50 hover:text-foreground'
@@ -86,6 +90,15 @@ export default function PeriodExplorer({ variants }: { variants: Record<string, 
                         n={n}
                     </button>
                 ))}
+            </div>
+
+            <div role="status" aria-live="polite" className="mx-3 mt-3 rounded-xl border border-gold/40 bg-gold/5 px-3 py-2.5">
+                <p className="text-[12px] font-bold text-foreground">目前選取：{INDICATOR_LABEL[tab]}({period})</p>
+                <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px]">
+                    <p className="text-faint">數值 <span className="num ml-1 text-[17px] font-bold text-foreground">{formatValue(selected?.value ?? null)}</span></p>
+                    <p className="text-faint">方向 <span className="ml-1 font-bold text-foreground">{selectedDirection}</span></p>
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-faint">N 為日 K 根數。僅比較不同期間，不改變四因素、57 項投票或 IDS。</p>
             </div>
 
             {/* 比較表 */}
@@ -120,6 +133,8 @@ export default function PeriodExplorer({ variants }: { variants: Record<string, 
                                 <span className="w-14 text-right">
                                     {na || !meta || !MetaIcon ? (
                                         <span className="text-[12px] font-semibold text-faint/60">N/A</span>
+                                    ) : tab === 'ATR' ? (
+                                        <span className="text-[12px] font-semibold text-faint">無方向</span>
                                     ) : (
                                         <span className={cn('inline-flex items-center gap-1 text-[12px] font-bold', meta.className)}>
                                             <MetaIcon className="size-3" />
