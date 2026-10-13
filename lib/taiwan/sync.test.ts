@@ -201,4 +201,36 @@ describe('syncTaiwanClose', () => {
         // Failures should note holiday schedule error or conservative state
         expect(summary.failures.some(f => f.includes('Holiday') || f.includes('holiday'))).toBe(true);
     });
+
+    it('若 close sync lease 已被鎖定，跳過並回報衝突', async () => {
+        const repo = createInMemoryTaiwanRepository();
+        // Hold lock for 2026-10-14 close sync
+        await repo.claimJob('close:sync:2026-10-14', 'other-worker', 60000);
+
+        const request = vi.fn() as unknown as TaiwanRequester;
+
+        const summary = await syncTaiwanClose({
+            repo,
+            request,
+            now: fixedNow,
+        });
+
+        expect(summary.failures.some(f => f.includes('Job lease active'))).toBe(true);
+        expect(request).not.toHaveBeenCalled();
+    });
+
+    it('close sync 執行完畢後必定釋放 lease', async () => {
+        const repo = createInMemoryTaiwanRepository();
+        const request = vi.fn().mockImplementation(async () => []) as TaiwanRequester;
+
+        await syncTaiwanClose({
+            repo,
+            request,
+            now: fixedNow,
+        });
+
+        // Lease must now be freely claimable
+        const canClaim = await repo.claimJob('close:sync:2026-10-14', 'new-worker', 1000);
+        expect(canClaim).toBe(true);
+    });
 });

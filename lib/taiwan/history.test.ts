@@ -227,6 +227,88 @@ describe('syncTaiwanHistory', () => {
         const bars = await repo.readBars({ exchange: 'TWSE', code: '2330' });
         expect(bars).toHaveLength(0);
     });
+    it('已完成之歷史舊月份自動跳過，不消耗預算且 summary.skipped > 0', async () => {
+        const repo = createInMemoryTaiwanRepository();
+        // Pre-populate completed bars for 2026-07 (older month)
+        await repo.writeBars([
+            {
+                exchange: 'TWSE',
+                code: '0050',
+                tradingDate: '2026-07-15',
+                t: 1784073600000,
+                o: 180,
+                h: 185,
+                l: 179,
+                c: 184,
+                v: 10000000,
+                change: 2,
+                complete: true,
+                source: 'twse',
+                priceBasis: 'unadjusted',
+                fetchedAt: '2026-07-15T18:00:00Z',
+            },
+        ]);
+
+        const requestedUrls: string[] = [];
+        const request = vi.fn().mockImplementation(async (url: string) => {
+            requestedUrls.push(url);
+            if (url.includes('20260901')) {
+                return twse0050Fixture;
+            }
+            return { stat: 'OK', data: [], fields: ['日期', '成交股數', '成交金額', '開盤價', '最高價', '最低價', '收盤價', '漲跌價差', '成交筆數'] };
+        }) as TaiwanRequester;
+
+        const summary = await syncTaiwanHistory({
+            repo,
+            request,
+            keys: [{ exchange: 'TWSE', code: '0050' }],
+            days: 60,
+            now: fixedNow,
+        });
+
+        // 2026-07 was already complete in repo, so it must be skipped!
+        const called202607 = requestedUrls.some(u => u.includes('20260701'));
+        expect(called202607).toBe(false);
+        expect(summary.skipped).toBeGreaterThan(0);
+    });
+
+    it('已被其他 worker 鎖定之商品跳過且 summary.skipped > 0', async () => {
+        const repo = createInMemoryTaiwanRepository();
+        // Hold lock for 2330
+        await repo.claimJob('history:TWSE:2330', 'other-worker', 60000);
+
+        const request = vi.fn() as unknown as TaiwanRequester;
+
+        const summary = await syncTaiwanHistory({
+            repo,
+            request,
+            keys: [{ exchange: 'TWSE', code: '2330' }],
+            days: 30,
+            now: fixedNow,
+        });
+
+        expect(summary.skipped).toBeGreaterThanOrEqual(1);
+        expect(request).not.toHaveBeenCalled();
+    });
+
+    it('執行完成後必定釋放 job lease', async () => {
+        const repo = createInMemoryTaiwanRepository();
+        const request = vi.fn().mockImplementation(async () => {
+            return { stat: 'OK', data: [], fields: ['日期', '成交股數', '成交金額', '開盤價', '最高價', '最低價', '收盤價', '漲跌價差', '成交筆數'] };
+        }) as TaiwanRequester;
+
+        await syncTaiwanHistory({
+            repo,
+            request,
+            keys: [{ exchange: 'TWSE', code: '2330' }],
+            days: 30,
+            now: fixedNow,
+        });
+
+        // Lease must now be freely claimable by another worker
+        const canClaim = await repo.claimJob('history:TWSE:2330', 'new-worker', 1000);
+        expect(canClaim).toBe(true);
+    });
 });
 
 describe('requestTaiwanHistory', () => {
@@ -254,6 +336,7 @@ describe('requestTaiwanHistory', () => {
             process.env.TAIWAN_MAX_RESPONSE_BYTES = '10000000';
 
             const repo = createInMemoryTaiwanRepository();
+            await repo.claimJob('history:TWSE:2330', 'live-worker', 60000);
             await repo.writeHistoryStatus({ exchange: 'TWSE', code: '2330' }, {
                 state: 'running',
                 completed: 2,
@@ -266,6 +349,36 @@ describe('requestTaiwanHistory', () => {
             const status = await requestTaiwanHistory({ exchange: 'TWSE', code: '2330' }, 800, repo);
             expect(status.state).toBe('running');
             expect(status.completed).toBe(2);
+        } finally {
+            process.env = originalEnv;
+        }
+    });
+
+    it('若先前 running 任務之 worker 當機且 lease 過期，自動重設為 queued', async () => {
+        const originalEnv = { ...process.env };
+        try {
+            process.env.TAIWAN_HISTORY_ENABLED = 'true';
+            process.env.TAIWAN_AUTO_SYNC_ENABLED = 'true';
+            process.env.TAIWAN_MAX_REQUESTS_PER_DAY = '100';
+            process.env.TAIWAN_MAX_JOBS_PER_DAY = '10';
+            process.env.TAIWAN_MAX_TRANSFER_BYTES_PER_DAY = '50000000';
+            process.env.TAIWAN_MAX_STORAGE_BYTES = '100000000';
+            process.env.TAIWAN_MAX_TRACKED_SECURITIES = '50';
+            process.env.TAIWAN_MAX_RESPONSE_BYTES = '10000000';
+
+            const repo = createInMemoryTaiwanRepository();
+            // Expired lease (locked in past)
+            await repo.claimJob('history:TWSE:2330', 'crashed-worker', -1000);
+            await repo.writeHistoryStatus({ exchange: 'TWSE', code: '2330' }, {
+                state: 'running',
+                completed: 1,
+                total: 10,
+                candleCount: 20,
+                reason: null,
+            });
+
+            const status = await requestTaiwanHistory({ exchange: 'TWSE', code: '2330' }, 800, repo);
+            expect(status.state).toBe('queued');
         } finally {
             process.env = originalEnv;
         }

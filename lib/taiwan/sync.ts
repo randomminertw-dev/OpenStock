@@ -28,7 +28,41 @@ const FUNDAMENTAL_DATASETS: TaiwanDatasetId[] = [
 ];
 
 /**
+ * Parses TWSE holiday schedule into a Set of YYYY-MM-DD holiday dates.
+ */
+export function parseTaiwanHolidays(raw: unknown): Set<string> {
+    const holidays = new Set<string>();
+    if (Array.isArray(raw)) {
+        for (const item of raw) {
+            if (!item || typeof item !== 'object') continue;
+            const rawDate =
+                (item as Record<string, unknown>).Date ??
+                (item as Record<string, unknown>).date;
+            const parsed = parseTaiwanDate(rawDate);
+            if (parsed) holidays.add(parsed);
+        }
+    }
+    return holidays;
+}
+
+/**
+ * Determines whether a date is a valid Taiwan trading day.
+ * Skips weekends (Saturday & Sunday) and official holidays.
+ */
+export function isTaiwanTradingDay(date: string | Date, holidays?: Set<string>): boolean {
+    const dateStr = typeof date === 'string' ? date : getTaipeiDayString(date);
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dayOfWeek = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    // Weekends (0: Sunday, 6: Saturday)
+    if (dayOfWeek === 0 || dayOfWeek === 6) return false;
+    // Known official holidays
+    if (holidays && holidays.has(dateStr)) return false;
+    return true;
+}
+
+/**
  * Synchronizes Taiwan post-market close data:
+ * - Uses repo.claimJob / releaseJob to enforce job leasing (close:sync:YYYY-MM-DD).
  * - Checks dataset checkpoints to prevent duplicate daily full fetches.
  * - Saves raw OpenAPI close bars with complete: false (unconfirmed snapshot).
  * - Preserves actual trading date when upstream date is older than today.
@@ -49,56 +83,67 @@ export async function syncTaiwanClose(input: {
         failures: [],
     };
 
-    // 1. Catalog Master Datasets Checkpoint
+    const jobKey = `close:sync:${todayStr}`;
+    const workerId = `close-worker-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const acquired = await repo.claimJob(jobKey, workerId, 5 * 60 * 1000);
+    if (!acquired) {
+        summary.failures.push(`Job lease active: ${jobKey} is already locked by another worker`);
+        return summary;
+    }
+
     try {
-        const catalogCheckpoint = await repo.readDatasetCheckpoint('twse-companies');
-        if (catalogCheckpoint === todayStr) {
-            summary.skipped += 4;
-        } else {
-            const [twseCompanies, twseEtfs, tpexCompanies, tpexEtfs] = await Promise.all([
-                fetchTaiwanDataset('twse-companies', request).catch(err => {
-                    summary.failures.push(`twse-companies: ${err.message || err}`);
-                    return [];
-                }),
-                fetchTaiwanDataset('twse-etfs', request).catch(err => {
-                    summary.failures.push(`twse-etfs: ${err.message || err}`);
-                    return [];
-                }),
-                fetchTaiwanDataset('tpex-companies', request).catch(err => {
-                    summary.failures.push(`tpex-companies: ${err.message || err}`);
-                    return [];
-                }),
-                fetchTaiwanDataset('tpex-etfs', request).catch(err => {
-                    summary.failures.push(`tpex-etfs: ${err.message || err}`);
-                    return [];
-                }),
-            ]);
-            summary.requested += 4;
+        // 1. Catalog Master Datasets Checkpoint
+        try {
+            const catalogCheckpoint = await repo.readDatasetCheckpoint('twse-companies');
+            if (catalogCheckpoint === todayStr) {
+                summary.skipped += 4;
+            } else {
+                const [twseCompanies, twseEtfs, tpexCompanies, tpexEtfs] = await Promise.all([
+                    fetchTaiwanDataset('twse-companies', request).catch(err => {
+                        summary.failures.push(`twse-companies: ${err.message || err}`);
+                        return [];
+                    }),
+                    fetchTaiwanDataset('twse-etfs', request).catch(err => {
+                        summary.failures.push(`twse-etfs: ${err.message || err}`);
+                        return [];
+                    }),
+                    fetchTaiwanDataset('tpex-companies', request).catch(err => {
+                        summary.failures.push(`tpex-companies: ${err.message || err}`);
+                        return [];
+                    }),
+                    fetchTaiwanDataset('tpex-etfs', request).catch(err => {
+                        summary.failures.push(`tpex-etfs: ${err.message || err}`);
+                        return [];
+                    }),
+                ]);
+                summary.requested += 4;
 
-            const catalog = buildTaiwanCatalog({
-                'twse-companies': twseCompanies,
-                'twse-etfs': twseEtfs,
-                'tpex-companies': tpexCompanies,
-                'tpex-etfs': tpexEtfs,
-            });
+                const catalog = buildTaiwanCatalog({
+                    'twse-companies': twseCompanies,
+                    'twse-etfs': twseEtfs,
+                    'tpex-companies': tpexCompanies,
+                    'tpex-etfs': tpexEtfs,
+                });
 
-            if (catalog.length > 0) {
-                await repo.writeCatalog(catalog);
-                await repo.writeDatasetCheckpoint('twse-companies', todayStr);
-                summary.written += catalog.length;
+                if (catalog.length > 0) {
+                    await repo.writeCatalog(catalog);
+                    await repo.writeDatasetCheckpoint('twse-companies', todayStr);
+                    summary.written += catalog.length;
+                }
             }
+        } catch (err) {
+            summary.failures.push(`Catalog sync error: ${err instanceof Error ? err.message : String(err)}`);
         }
-    } catch (err) {
-        summary.failures.push(`Catalog sync error: ${err instanceof Error ? err.message : String(err)}`);
-    }
 
-    // 2. Holiday Schedule Check (Conservative freshness)
-    try {
-        await fetchTaiwanDataset('twse-holiday', request);
-        summary.requested++;
-    } catch (err) {
-        summary.failures.push(`Holiday schedule error: ${err instanceof Error ? err.message : String(err)}`);
-    }
+        // 2. Holiday Schedule Check (Conservative freshness)
+        let holidays = new Set<string>();
+        try {
+            const rawHolidays = await fetchTaiwanDataset('twse-holiday', request);
+            summary.requested++;
+            holidays = parseTaiwanHolidays(rawHolidays);
+        } catch (err) {
+            summary.failures.push(`Holiday schedule error: ${err instanceof Error ? err.message : String(err)}`);
+        }
 
     // 3. TWSE OpenAPI Close Quotes (complete: false snapshot)
     try {
@@ -226,4 +271,7 @@ export async function syncTaiwanClose(input: {
     }
 
     return summary;
+    } finally {
+        await repo.releaseJob(jobKey, workerId);
+    }
 }

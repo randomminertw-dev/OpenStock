@@ -3,9 +3,12 @@ import { planTaiwanHistory, syncTaiwanHistory } from '../lib/taiwan/history';
 import { syncTaiwanClose } from '../lib/taiwan/sync';
 import { parseTaiwanKey } from '../lib/taiwan/symbols';
 import { TAIWAN_DATASETS, type TaiwanDatasetId } from '../lib/taiwan/datasets';
-import { createMongoTaiwanRepository } from '../lib/taiwan/repository';
+import { buildTaiwanCatalog } from '../lib/taiwan/catalog';
+import { buildTaiwanDetails } from '../lib/taiwan/fundamentals';
+import { fetchTaiwanDataset } from '../lib/taiwan/sources';
+import { createInMemoryTaiwanRepository, createMongoTaiwanRepository } from '../lib/taiwan/repository';
 import { createBudgetedRequest } from '../lib/taiwan/budget';
-import type { TaiwanKey } from '../lib/taiwan/types';
+import type { TaiwanKey, TaiwanRepository, TaiwanRequester, TaiwanSecurity } from '../lib/taiwan/types';
 
 export type CliOptions = {
     dryRun: boolean;
@@ -82,7 +85,9 @@ export function parseCliArgs(args: string[]): CliOptions {
 export async function runCli(
     args: string[],
     env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
-    io: { log: (s: string) => void; error: (s: string) => void } = console
+    io: { log: (s: string) => void; error: (s: string) => void } = console,
+    injectedRepo?: TaiwanRepository,
+    injectedRequest?: TaiwanRequester
 ): Promise<number> {
     const opts = parseCliArgs(args);
 
@@ -192,14 +197,110 @@ export async function runCli(
     io.log(`Target: ${targetLabel}`);
 
     const config = loadTaiwanSyncConfig(env)!;
-    const repo = createMongoTaiwanRepository();
-    const request = createBudgetedRequest(repo, config);
+    const repo =
+        injectedRepo ??
+        (opts.target === 'local'
+            ? createInMemoryTaiwanRepository()
+            : createMongoTaiwanRepository());
+    const request = injectedRequest ?? createBudgetedRequest(repo, config);
     const now = new Date();
+
+    if (opts.catalog) {
+        io.log('Executing master catalog sync...');
+        const [twseCompanies, twseEtfs, tpexCompanies, tpexEtfs] = await Promise.all([
+            fetchTaiwanDataset('twse-companies', request).catch(() => []),
+            fetchTaiwanDataset('twse-etfs', request).catch(() => []),
+            fetchTaiwanDataset('tpex-companies', request).catch(() => []),
+            fetchTaiwanDataset('tpex-etfs', request).catch(() => []),
+        ]);
+        const catalog = buildTaiwanCatalog({
+            'twse-companies': twseCompanies,
+            'twse-etfs': twseEtfs,
+            'tpex-companies': tpexCompanies,
+            'tpex-etfs': tpexEtfs,
+        });
+        if (catalog.length > 0) {
+            await repo.writeCatalog(catalog);
+        }
+        io.log(`Catalog sync completed: written=${catalog.length}`);
+    }
 
     if (opts.close) {
         io.log('Executing close sync...');
         const summary = await syncTaiwanClose({ repo, request, now });
         io.log(`Close sync completed: written=${summary.written}, skipped=${summary.skipped}, failures=${summary.failures.length}`);
+    }
+
+    if (opts.details) {
+        io.log('Executing fundamentals and details sync...');
+        const [
+            twseRev, tpexRev,
+            twseEps, tpexEps,
+            twseBwibbu, tpexPeratio,
+            twseEx, tpexEx,
+            twseAnn, tpexAnn,
+        ] = await Promise.all([
+            fetchTaiwanDataset('twse-revenue', request).catch(() => []),
+            fetchTaiwanDataset('tpex-revenue', request).catch(() => []),
+            fetchTaiwanDataset('twse-eps', request).catch(() => []),
+            fetchTaiwanDataset('tpex-eps', request).catch(() => []),
+            fetchTaiwanDataset('twse-bwibbu-all', request).catch(() => []),
+            fetchTaiwanDataset('tpex-peratio-analysis', request).catch(() => []),
+            fetchTaiwanDataset('twse-exright', request).catch(() => []),
+            fetchTaiwanDataset('tpex-exright', request).catch(() => []),
+            fetchTaiwanDataset('twse-announcements', request).catch(() => []),
+            fetchTaiwanDataset('tpex-announcements', request).catch(() => []),
+        ]);
+
+        const bundle = {
+            'twse-revenue': twseRev,
+            'tpex-revenue': tpexRev,
+            'twse-eps': twseEps,
+            'tpex-eps': tpexEps,
+            'twse-bwibbu-all': twseBwibbu,
+            'tpex-peratio-analysis': tpexPeratio,
+            'twse-exright': twseEx,
+            'tpex-exright': tpexEx,
+            'twse-announcements': twseAnn,
+            'tpex-announcements': tpexAnn,
+        };
+
+        const existingCatalog = await repo.readCatalog();
+        const catalogMap = new Map(existingCatalog.map(s => [`${s.exchange}:${s.code}`, s]));
+        const targetSecurities: TaiwanSecurity[] = [];
+
+        if (opts.symbols.length > 0) {
+            for (const sym of opts.symbols) {
+                const found = catalogMap.get(`${sym.exchange}:${sym.code}`);
+                if (found) {
+                    targetSecurities.push(found);
+                } else {
+                    targetSecurities.push({
+                        exchange: sym.exchange,
+                        code: sym.code,
+                        symbol: `${sym.exchange}:${sym.code}`,
+                        name: sym.code,
+                        kind: 'stock',
+                        currency: 'TWD',
+                        listingDate: null,
+                        status: 'active',
+                        metadata: {},
+                        source: 'cli',
+                        asof: now.toISOString().slice(0, 10),
+                    });
+                }
+            }
+        } else {
+            targetSecurities.push(...existingCatalog);
+        }
+
+        let writtenCount = 0;
+        for (const sec of targetSecurities) {
+            const details = buildTaiwanDetails(sec, bundle);
+            await repo.writeDetails(details);
+            writtenCount++;
+        }
+        io.log(`Details sync completed: written=${writtenCount}`);
     }
 
     if (opts.history && opts.symbols.length > 0) {
