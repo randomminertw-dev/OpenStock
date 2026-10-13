@@ -135,6 +135,46 @@ describe('recent closed crypto factor candles', () => {
         expect(fallback).not.toHaveBeenCalled();
     });
 
+    it.each([
+        [{ unexpected: true }],
+        [[now - 4 * 3600_000, '100']],
+        [[now - 4 * 3600_000, '100', '108', '99', '105', '12', 'not-a-time']],
+    ])('classifies nonempty malformed Binance interval responses as api-error: %j', async (row) => {
+        vi.setSystemTime(now);
+        const fetcher = vi.fn().mockResolvedValue(response([row]));
+        vi.stubGlobal('fetch', fetcher);
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        expect(await getFactorCandlesWithReason('BINANCE:BTCUSDT', '4h')).toMatchObject({
+            candles: null, reason: 'api-error', source: { provider: 'binance', symbol: 'BTCUSDT' },
+        });
+        expect(fetcher).toHaveBeenCalledTimes(1);
+        expect(new URL(fetcher.mock.calls[0][0]).searchParams.get('interval')).toBe('4h');
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it('keeps an empty Binance interval response as no-data', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response([])));
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        expect(await getFactorCandlesWithReason('BINANCE:BTCUSDT', '4h')).toMatchObject({
+            candles: null, reason: 'no-data', source: { provider: 'binance', symbol: 'BTCUSDT' },
+        });
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it('retains a valid closed Binance interval bar beside malformed rows', async () => {
+        vi.setSystemTime(now);
+        const duration = 4 * 3600_000;
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response([
+            { unexpected: true }, binanceBar(now - duration, duration),
+        ])));
+        const { getFactorCandlesWithReason } = await import('./alpaca.actions');
+        expect(await getFactorCandlesWithReason('BINANCE:BTCUSDT', '4h')).toMatchObject({
+            reason: null, source: { provider: 'binance' },
+            candles: { t: [(now - duration) / 1000], c: [105] },
+        });
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
     it('preserves missing Alpaca config for CG hourly bars', async () => {
         vi.stubEnv('ALPACA_API_KEY', '');
         const fetcher = vi.fn().mockResolvedValue(response({ symbol: 'btc' }));

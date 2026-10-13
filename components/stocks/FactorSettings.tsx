@@ -14,6 +14,7 @@ type FactorResponse = {
 };
 type FactorStatus = 'idle' | 'preview' | 'saved' | 'error';
 type FactorUpdateResult = { preference: FactorPreference; saved: boolean; response: FactorResponse | null; error: 'save' | 'refresh' | null };
+type FactorDisplay = { applied: FactorPreference | null; appliedSaved: boolean; shown: FactorResponse };
 
 export function isRetryableFactorFailure(result: FactorUpdateResult): boolean {
     if (result.error === 'refresh') return true;
@@ -54,6 +55,12 @@ export async function runFactorUpdate(
     }
 }
 
+/** 評分可顯示時，與其對應的偏好及儲存標記一併更新。 */
+export function factorDisplayAfterRefresh(previous: FactorDisplay, outcome: FactorUpdateResult, saved: boolean): FactorDisplay {
+    if (!outcome.response) return previous;
+    return { applied: outcome.preference, appliedSaved: saved, shown: outcome.response };
+}
+
 const FACTORS: { id: FactorId; label: string }[] = [
     { id: 'T', label: '趨勢 T' }, { id: 'M', label: '動能 M' },
     { id: 'V', label: '量能 V' }, { id: 'R', label: '風險 R' },
@@ -80,9 +87,8 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
     initialSaved: boolean;
 }) {
     const [draft, setDraft] = useState<FactorPreference | null>(initialPreference);
-    const [applied, setApplied] = useState<FactorPreference | null>(initialPreference);
-    const [appliedSaved, setAppliedSaved] = useState(initialSaved);
-    const [shown, setShown] = useState(initialResponse);
+    const [display, setDisplay] = useState<FactorDisplay>({ applied: initialPreference, appliedSaved: initialSaved, shown: initialResponse });
+    const { applied, appliedSaved, shown } = display;
     const [status, setStatus] = useState<FactorStatus>(initialSaved ? 'saved' : 'idle');
     const [message, setMessage] = useState('');
     const [busy, setBusy] = useState(false);
@@ -148,9 +154,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
             }
             setRetryPreference(isRetryableFactorFailure(outcome) ? outcome.preference : null);
             if (outcome.response) {
-                setShown(outcome.response);
-                setApplied(outcome.preference);
-                setAppliedSaved(save);
+                setDisplay(current => factorDisplayAfterRefresh(current, outcome, save));
                 if (outcome.response.reason) setMessage(FAILURE[outcome.response.reason]);
             }
         } finally {
@@ -171,7 +175,7 @@ export default function FactorSettings({ symbol, initialPreference, initialRespo
                 return;
             }
             if (outcome.response) {
-                setShown(outcome.response);
+                setDisplay(current => factorDisplayAfterRefresh(current, outcome, status === 'saved'));
                 setRetryPreference(isRetryableFactorFailure(outcome) ? outcome.preference : null);
                 setMessage(outcome.response.reason ? FAILURE[outcome.response.reason] : '評分已更新。');
             }

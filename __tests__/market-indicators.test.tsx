@@ -219,6 +219,73 @@ describe('indicator assessments across markets', () => {
 });
 
 describe('rendered stock details', () => {
+    function factorResponse(n: number) {
+        const factor = (id: 'T' | 'M' | 'V' | 'R') => ({ id, score: n, n, formulaVersion: 'test', reason: '' });
+        return {
+            assessment: {
+                factors: { T: factor('T'), M: factor('M'), V: factor('V'), R: factor('R') },
+                idsFactor: { idsPct: 0, upPct: 0, downPct: 0, neutralPct: 100, validCount: 3 },
+                asof: '2026-10-13', source: null, interval: '1d' as const,
+            },
+            reason: null, candleCount: 270,
+        };
+    }
+
+    it('factor refresh state moves saved summary and cards to B only after retry succeeds', async () => {
+        const factorSettings = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference, presetFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const A = defaultFactorPreference('us');
+        const B = presetFactorPreference('us', 'medium');
+        const responseA = factorResponse(14);
+        const responseB = factorResponse(21);
+        const save = vi.fn().mockResolvedValue(B);
+        const refresh = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(responseB);
+        const initial = { applied: A, appliedSaved: false, shown: responseA };
+        const failed = await factorSettings.runFactorUpdate(B, save, refresh);
+        expect(factorSettings.factorDisplayAfterRefresh(initial, failed, true)).toEqual(initial);
+        const retried = await factorSettings.runFactorUpdate(failed.preference, null, refresh);
+        const settled = factorSettings.factorDisplayAfterRefresh(initial, retried, true);
+        expect(settled).toEqual({ applied: B, appliedSaved: true, shown: responseB });
+        const html = renderToStaticMarkup(<factorSettings.default symbol="AAPL" initialPreference={settled.applied}
+            initialResponse={settled.shown} readError={false} initialSaved={settled.appliedSaved} />);
+        expect(html).toContain('目前套用：');
+        expect(html).toContain('T21 / M21 / V21 / R21');
+        expect(html).toContain('已儲存');
+        expect(html).toContain('+21.0');
+        expect(save).toHaveBeenCalledOnce();
+    });
+
+    it('factor refresh state keeps preview retry unsaved', async () => {
+        const factorSettings = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference, presetFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const A = defaultFactorPreference('us');
+        const B = presetFactorPreference('us', 'short');
+        const initial = { applied: A, appliedSaved: true, shown: factorResponse(14) };
+        const failed = await factorSettings.runFactorUpdate(B, null, vi.fn().mockRejectedValue(new Error('offline')));
+        expect(factorSettings.factorDisplayAfterRefresh(initial, failed, false)).toEqual(initial);
+        const responseB = factorResponse(7);
+        const retried = await factorSettings.runFactorUpdate(B, null, vi.fn().mockResolvedValue(responseB));
+        expect(factorSettings.factorDisplayAfterRefresh(initial, retried, false)).toEqual({ applied: B, appliedSaved: false, shown: responseB });
+    });
+
+    it('factor refresh state retains prior cards and retry candidate after repeated failures', async () => {
+        const factorSettings = await import('@/components/stocks/FactorSettings');
+        const { defaultFactorPreference, presetFactorPreference } = await import('@/lib/indicators/factor-periods');
+        const A = defaultFactorPreference('us');
+        const B = presetFactorPreference('us', 'long');
+        const initial = { applied: A, appliedSaved: false, shown: factorResponse(14) };
+        const save = vi.fn().mockResolvedValue(B);
+        const refresh = vi.fn().mockRejectedValue(new Error('offline'));
+        const first = await factorSettings.runFactorUpdate(B, save, refresh);
+        const second = await factorSettings.runFactorUpdate(first.preference, null, refresh);
+        expect(factorSettings.factorDisplayAfterRefresh(initial, second, true)).toEqual(initial);
+        expect(factorSettings.isRetryableFactorFailure(first)).toBe(true);
+        expect(factorSettings.isRetryableFactorFailure(second)).toBe(true);
+        expect(first.preference).toEqual(B);
+        expect(second.preference).toEqual(B);
+        expect(save).toHaveBeenCalledOnce();
+    });
+
     it('keeps factors visible when 59 bars cannot produce the 57-vote assessment', async () => {
         vi.stubGlobal('fetch', marketFetch(59));
         const { default: Dashboard } = await import('@/components/stocks/IndicatorDashboard');

@@ -17,7 +17,13 @@ export async function binanceIntervalCandles(pair: string, interval: Exclude<Cry
         if (!Array.isArray(data)) {
             throw new CandleRequestError('api-error');
         }
-        return normalizeCandles(data.filter(row => Array.isArray(row) && row.length >= 7 && Number.isFinite(Number(row[6])) && Number(row[6]) < now).map(row => ({
+        const validRows = data.filter(row => Array.isArray(row) && row.length >= 7
+            && Number.isFinite(Number(row[0])) && Number(row[0]) > 0
+            && Number.isFinite(Number(row[6])) && Number(row[6]) > 0);
+        if (data.length > 0 && validRows.length === 0) {
+            throw new CandleRequestError('api-error');
+        }
+        return normalizeCandles(validRows.filter(row => Number(row[6]) < now).map(row => ({
             t: Number(row[0]) / 1000, o: row[1], h: row[2], l: row[3], c: row[4], v: row[5],
         })));
     });
