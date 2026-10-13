@@ -80,7 +80,7 @@ describe('buildTaiwanCatalog', () => {
         expect(item0050?.status).toBe('active');
     });
 
-    it('labels securities appearing only in quote feeds as unknown, not stock', () => {
+    it('labels securities appearing only in quote feeds as unknown, not stock and currency as null', () => {
         const input: TaiwanCatalogInput = {
             'twse-companies': [],
             'twse-etfs': [],
@@ -88,6 +88,13 @@ describe('buildTaiwanCatalog', () => {
                 {
                     Code: '01001T',
                     Name: '未知商品',
+                    Date: '1151012',
+                },
+            ],
+            'tpex-mainboard-daily-close-quotes': [
+                {
+                    SecuritiesCompanyCode: '7799',
+                    CompanyName: '未知上櫃商品',
                     Date: '1151012',
                 },
             ],
@@ -99,6 +106,12 @@ describe('buildTaiwanCatalog', () => {
         expect(itemUnknown).toBeDefined();
         expect(itemUnknown?.kind).toBe('unknown');
         expect(itemUnknown?.kind).not.toBe('stock');
+        expect(itemUnknown?.currency).toBeNull();
+
+        const itemTpexUnknown = catalog.find(s => s.code === '7799');
+        expect(itemTpexUnknown).toBeDefined();
+        expect(itemTpexUnknown?.kind).toBe('unknown');
+        expect(itemTpexUnknown?.currency).toBeNull();
     });
 
     it('sets currency to null for foreign securities without explicit currency evidence', () => {
@@ -187,6 +200,13 @@ describe('searchTaiwanCatalog', () => {
         expect(searchTaiwanCatalog(sampleCatalog, '')).toEqual([]);
         expect(searchTaiwanCatalog(sampleCatalog, '   ')).toEqual([]);
         expect(searchTaiwanCatalog(sampleCatalog, 'NON_EXISTENT_SYMBOL_XYZ')).toEqual([]);
+    });
+
+    it('does not falsely match catalog items when query is a bare market prefix or suffix', () => {
+        expect(searchTaiwanCatalog(sampleCatalog, 'TWSE:')).toEqual([]);
+        expect(searchTaiwanCatalog(sampleCatalog, 'TPEX:')).toEqual([]);
+        expect(searchTaiwanCatalog(sampleCatalog, '.TW')).toEqual([]);
+        expect(searchTaiwanCatalog(sampleCatalog, '.TWO')).toEqual([]);
     });
 
     it('respects the limit argument', () => {

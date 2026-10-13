@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import tpexExrightFixture from '../../__tests__/fixtures/taiwan/tpex-exright.json';
 import tpexPeratioFixture from '../../__tests__/fixtures/taiwan/tpex-peratio.json';
 import twseAnnouncementsFixture from '../../__tests__/fixtures/taiwan/twse-announcements.json';
 import twseBwibbuFixture from '../../__tests__/fixtures/taiwan/twse-bwibbu.json';
@@ -39,6 +40,23 @@ const stock1101: TaiwanSecurity = {
     asof: '2026-10-12',
 };
 
+const stock6488: TaiwanSecurity = {
+    exchange: 'TPEX',
+    code: '6488',
+    symbol: 'TPEX:6488',
+    name: '環球晶',
+    kind: 'stock',
+    currency: 'TWD',
+    listingDate: '2015-09-25',
+    status: 'active',
+    metadata: {
+        industry: '半導體業',
+        website: 'https://www.sas-globalwafers.com',
+    },
+    source: 'tpex-companies',
+    asof: '2026-10-12',
+};
+
 const etf0050: TaiwanSecurity = {
     exchange: 'TWSE',
     code: '0050',
@@ -66,6 +84,7 @@ describe('buildTaiwanDetails', () => {
         'twse-eps': twseEpsFixture,
         'twse-announcements': twseAnnouncementsFixture,
         'twse-exright': twseExrightFixture,
+        'tpex-exright': tpexExrightFixture,
     };
 
     it('builds fundamental fields for standard stock 2330', () => {
@@ -167,5 +186,67 @@ describe('buildTaiwanDetails', () => {
         expect(splitEvent).toBeDefined();
         // Warns about unadjusted price basis without inventing an unsubstantiated ratio
         expect(splitEvent?.title).toContain('未調整');
+    });
+
+    it('builds TPEx stock valuation fields and corporate action events for 6488', () => {
+        const details = buildTaiwanDetails(stock6488, bundle);
+
+        expect(details.security).toEqual(stock6488);
+
+        // Valuation from tpex-peratio-analysis
+        const peField = details.fields.find(f => f.label === '本益比');
+        expect(peField).toBeDefined();
+        expect(peField?.value).toBe('49.27');
+        expect(peField?.unit).toBe('倍');
+
+        const yieldField = details.fields.find(f => f.label === '殖利率');
+        expect(yieldField).toBeDefined();
+        expect(yieldField?.value).toBe('0.76');
+        expect(yieldField?.unit).toBe('%');
+
+        const pbField = details.fields.find(f => f.label === '股價淨值比');
+        expect(pbField).toBeDefined();
+        expect(pbField?.value).toBe('5.02');
+        expect(pbField?.unit).toBe('倍');
+
+        // Events from tpex-exright
+        const divEvent = details.events.find(e => e.kind === 'dividend');
+        expect(divEvent).toBeDefined();
+        expect(divEvent?.date).toBe('2026-07-15');
+        expect(divEvent?.title).toBe('除息：現金股利 8.0 元');
+        expect(divEvent?.source).toBe('tpex');
+    });
+
+    it('allows external announcement links matching ETF issuerLink', () => {
+        const tpexEtf: TaiwanSecurity = {
+            exchange: 'TPEX',
+            code: '00679B',
+            symbol: 'TPEX:00679B',
+            name: '元大美債20年',
+            kind: 'etf',
+            currency: 'TWD',
+            listingDate: '2017-01-17',
+            status: 'active',
+            metadata: {
+                issuerLink: 'https://www.yuanta.com',
+            },
+            source: 'tpex-etfs',
+            asof: '2026-10-12',
+        };
+
+        const etfBundle: TaiwanDatasetBundle = {
+            'tpex-announcements': [
+                {
+                    SecuritiesCompanyCode: '00679B',
+                    Date: '1151012',
+                    主旨: '基金收益分配評價結果',
+                    說明: '分配事宜說明',
+                    WebAddress: 'https://www.yuanta.com/etf/notice/00679B',
+                },
+            ],
+        };
+
+        const details = buildTaiwanDetails(tpexEtf, etfBundle);
+        expect(details.announcements[0]?.sourceUrl).toBe('https://www.yuanta.com/etf/notice/00679B');
     });
 });

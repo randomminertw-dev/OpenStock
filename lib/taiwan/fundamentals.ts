@@ -38,10 +38,17 @@ function sanitizeUrl(rawUrl: string | undefined, issuerWebsite?: string): string
         );
         if (isTrustedOfficial) return trimmed;
 
-        if (issuerWebsite && issuerWebsite.startsWith('https://')) {
-            const issuerHost = new URL(issuerWebsite).hostname.toLowerCase();
-            if (hostname === issuerHost || hostname.endsWith(`.${issuerHost}`)) {
-                return trimmed;
+        if (issuerWebsite) {
+            try {
+                const issuerUrl = new URL(
+                    issuerWebsite.startsWith('http') ? issuerWebsite : `https://${issuerWebsite}`
+                );
+                const issuerHost = issuerUrl.hostname.toLowerCase();
+                if (issuerHost && (hostname === issuerHost || hostname.endsWith(`.${issuerHost}`))) {
+                    return trimmed;
+                }
+            } catch {
+                // Ignore parse errors
             }
         }
 
@@ -280,7 +287,7 @@ export function buildTaiwanDetails(
             const body = stripHtml(String(row['說明'] || ''));
             const sourceUrl = sanitizeUrl(
                 String(row['網址'] || row['WebAddress'] || ''),
-                security.metadata.website
+                security.metadata.website || security.metadata.issuerLink
             );
 
             announcements.push({

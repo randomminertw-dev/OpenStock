@@ -228,7 +228,7 @@ export function buildTaiwanCatalog(input: TaiwanCatalogInput): TaiwanSecurity[] 
                     symbol: `TWSE:${rawCode}`,
                     name,
                     kind: 'unknown', // DO NOT guess stock!
-                    currency: 'TWD',
+                    currency: null,
                     listingDate: null,
                     status: 'active',
                     metadata: {},
@@ -257,7 +257,7 @@ export function buildTaiwanCatalog(input: TaiwanCatalogInput): TaiwanSecurity[] 
                     symbol: `TPEX:${rawCode}`,
                     name,
                     kind: 'unknown', // DO NOT guess stock!
-                    currency: 'TWD',
+                    currency: null,
                     listingDate: null,
                     status: 'active',
                     metadata: {},
@@ -317,7 +317,7 @@ export function searchTaiwanCatalog(
             score = 800;
         } else if (item.name === trimmed) {
             score = 700;
-        } else if (item.code.startsWith(cleanCode)) {
+        } else if (cleanCode && item.code.startsWith(cleanCode)) {
             score = 600 - (item.code.length - cleanCode.length);
         } else if (item.name.startsWith(trimmed)) {
             score = 500;
