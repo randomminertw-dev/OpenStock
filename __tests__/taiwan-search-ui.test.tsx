@@ -25,11 +25,15 @@ vi.mock('@/components/ui/command', () => ({
     ),
 }));
 
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
+
 import SearchCommand, { createSearchSequenceGuard, getSearchIndicatorText, isImeComposing } from '../components/SearchCommand';
-import { formatWatchlistPrice, formatWatchlistChange, isTaiwanWatchlistSymbol } from '../components/watchlist/WatchlistTable';
+import WatchlistTable, { formatWatchlistPrice, formatWatchlistChange, isTaiwanWatchlistSymbol } from '../components/watchlist/WatchlistTable';
 
 describe('SearchCommand UI logic and safeguards', () => {
-    it('prevents earlier slow searches from overwriting newer search results (sequence guard)', async () => {
+    it('prevents earlier slow searches from overwriting newer search results or cleared state (sequence guard)', async () => {
         const guard = createSearchSequenceGuard();
 
         // User types '2' -> initiates request 1
@@ -56,6 +60,18 @@ describe('SearchCommand UI logic and safeguards', () => {
 
         // Must still have request 2's results!
         expect(latestResults).toEqual(['TWSE:2330']);
+
+        // User clears the search bar (isSearchMode = false) -> sequence advances
+        const seqCleared = guard.next();
+        expect(seqCleared).toBeGreaterThan(seq2);
+        const popularStocks = ['TWSE:2330', 'TWSE:0050'];
+        latestResults = popularStocks;
+
+        // In-flight slow search callback resolving late after search was cleared:
+        if (guard.isLatest(seq2)) {
+            latestResults = ['OVERWRITTEN_BY_SLOW_INFLIGHT'];
+        }
+        expect(latestResults).toEqual(popularStocks);
     });
 
     it('guards against IME composition Enter key triggering navigation', () => {
@@ -158,5 +174,39 @@ describe('WatchlistTable presentation and helpers', () => {
 
         // Negative change
         expect(formatWatchlistChange(-8, 500)).toBe('-8.00');
+    });
+
+    it('disables alert button for Taiwan stocks even when symbol is a bare code (e.g. 2330)', () => {
+        const rows = [
+            {
+                symbol: '2330',
+                name: '台積電',
+                price: 1040,
+                change: 15,
+                changePercent: 1.46,
+                marketCap: 27000000000000,
+                tradingDate: '2026-10-13',
+            },
+            {
+                symbol: 'AAPL',
+                name: 'Apple Inc.',
+                price: 230,
+                change: 2.5,
+                changePercent: 1.1,
+                marketCap: 3500000000000,
+                currency: 'USD',
+            },
+        ];
+
+        const html = renderToStaticMarkup(
+            <WatchlistTable initialRows={rows as Parameters<typeof WatchlistTable>[0]['initialRows']} />
+        );
+
+        // AAPL has active alert button modal trigger
+        expect(html).toContain('title="Set a price alert for AAPL"');
+
+        // 2330 must NOT have active alert button
+        expect(html).not.toContain('title="Set a price alert for 2330"');
+        expect(html).toContain('title="Alerts are available for US stocks and crypto"');
     });
 });

@@ -111,6 +111,7 @@ export default function SearchCommand({
 
     const handleSearch = async () => {
         if (!isSearchMode) {
+            searchSeqRef.current++;
             setErrorMessage(null);
             return setStocks(initialStocks);
         }

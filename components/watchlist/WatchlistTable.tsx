@@ -139,7 +139,7 @@ export default function WatchlistTable({ initialRows }: { initialRows: Row[] }) 
                                 <td className="is-num text-muted-foreground">{row.marketCap ? formatNumber(row.marketCap) : '—'}</td>
                                 <td>
                                     <div className="flex items-center justify-end gap-1">
-                                        {hasFinnhubQuotes(row.symbol) ? (
+                                        {hasFinnhubQuotes(row.symbol) && !isTaiwan ? (
                                             <CreateAlertModal symbol={row.symbol} currentPrice={row.price ?? 0} currency={row.currency || 'USD'}>
                                                 <button type="button" className="icon-btn" title={`Set a price alert for ${row.symbol}`} aria-label={`Set a price alert for ${row.symbol}`}>
                                                     <Bell />

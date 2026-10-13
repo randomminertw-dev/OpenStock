@@ -117,7 +117,7 @@ npm run taiwan:sync -- --dry-run --symbols TWSE:2330,TWSE:0050,TPEX:6488,TPEX:00
   - 端點為全市場每日收盤（`dailyQuotes`），800 日曆天約有 550~570 個交易日。
   - 每次全市場回應約 1.5 MB ~ 2.5 MB（未解壓縮）。
   - 若需回填完整 800 日上櫃歷史，需發送 **550+ 次全市場請求**，總傳輸量約 **1.1 GB ~ 1.4 GB**。
-  - **重要提醒**：在每日免費配額 `TAIWAN_MAX_DAILY_REQUESTS=200` 與 `TAIWAN_MAX_DAILY_BYTES=100MB` 的限制下，上櫃 800 日全量回填無法在「單次開頁」或單日內完成，需分批在 3~6 個工作日透過背景或 CLI 逐步回填完畢。本機 CLI 工具與背景排程均受原子預算控制，絕不超支。
+  - **重要提醒**：在每日免費配額 `TAIWAN_MAX_REQUESTS_PER_DAY=200` 與 `TAIWAN_MAX_TRANSFER_BYTES_PER_DAY=100MB` 的限制下，上櫃 800 日全量回填無法在「單次開頁」或單日內完成，需分批在 3~6 個工作日透過背景或 CLI 逐步回填完畢。本機 CLI 工具與背景排程均受原子預算控制，絕不超支。
 
 ---
 
