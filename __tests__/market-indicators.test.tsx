@@ -118,7 +118,7 @@ describe('indicator assessments across markets', () => {
     it('keeps 57 votes gated at 60 bars while returning independently calculable factors at 59', async () => {
         vi.stubGlobal('fetch', marketFetch(59));
         const { getIndicatorAssessmentWithReason, getFourFactorAssessmentWithReason, getPeriodAssessment } = await import('@/lib/actions/indicators.actions');
-        const preference = { market: 'taiwan', preset: 'short', periods: { T: 7, M: 7, V: 7, R: 7 }, interval: null };
+        const preference = { version: 2, market: 'taiwan', preset: 'short', periods: { T: 5, M: 7, V: 7, R: 7 }, interval: null };
         const [vote, factor, period] = await Promise.all([
             getIndicatorAssessmentWithReason('2330.TW'),
             getFourFactorAssessmentWithReason('2330.TW', preference),
@@ -146,7 +146,7 @@ describe('indicator assessments across markets', () => {
         });
         vi.stubGlobal('fetch', fetcher);
         const { getIndicatorAssessmentWithReason, getFourFactorAssessmentWithReason, getPeriodAssessment, getFactorAssessment } = await import('@/lib/actions/indicators.actions');
-        const preference = { market: 'crypto', preset: 'short', periods: { T: 10, M: 10, V: 10, R: 10 }, interval: '4h' };
+        const preference = { version: 2, market: 'crypto', preset: 'short', periods: { T: 5, M: 10, V: 10, R: 10 }, interval: '4h' };
         const [vote, factor, period, legacy] = await Promise.all([
             getIndicatorAssessmentWithReason('BINANCE:BTCUSDT'),
             getFourFactorAssessmentWithReason('BINANCE:BTCUSDT', preference),
@@ -166,11 +166,11 @@ describe('indicator assessments across markets', () => {
         const fetcher = marketFetch();
         vi.stubGlobal('fetch', fetcher);
         const { getFourFactorAssessmentWithReason } = await import('@/lib/actions/indicators.actions');
-        const forged = { market: 'crypto', preset: 'short', periods: { T: 10, M: 10, V: 10, R: 10 }, interval: '4h' };
+        const forged = { version: 2, market: 'crypto', preset: 'short', periods: { T: 5, M: 10, V: 10, R: 10 }, interval: '4h' };
         const result = await getFourFactorAssessmentWithReason('AAPL', forged);
         expect(result).toMatchObject({ assessment: null, reason: 'invalid-preference', candleCount: 0 });
         expect(fetcher).not.toHaveBeenCalled();
-        const valid = await getFourFactorAssessmentWithReason('AAPL', { market: 'us', preset: 'short', periods: { T: 7, M: 7, V: 7, R: 7 }, interval: null });
+        const valid = await getFourFactorAssessmentWithReason('AAPL', { version: 2, market: 'us', preset: 'short', periods: { T: 5, M: 7, V: 7, R: 7 }, interval: null });
         expect(valid.assessment).toMatchObject({ interval: '1d', source: { provider: 'alpaca' } });
         expect(fetcher.mock.calls.every(([url]) => !new URL(url).searchParams.has('interval'))).toBe(true);
     });
@@ -179,7 +179,7 @@ describe('indicator assessments across markets', () => {
         const fetcher = marketFetch();
         vi.stubGlobal('fetch', fetcher);
         const { getFourFactorAssessmentWithReason } = await import('@/lib/actions/indicators.actions');
-        const result = await getFourFactorAssessmentWithReason('2330.TW', { market: 'taiwan', preset: 'custom', periods: { T: 0, M: 14, V: 14, R: 14 }, interval: null });
+        const result = await getFourFactorAssessmentWithReason('2330.TW', { version: 2, market: 'taiwan', preset: 'custom', periods: { T: 0, M: 14, V: 14, R: 14 }, interval: null });
         expect(result).toMatchObject({ assessment: null, reason: 'invalid-preference', candleCount: 0 });
         expect(fetcher).not.toHaveBeenCalled();
     });
@@ -194,11 +194,11 @@ describe('indicator assessments across markets', () => {
         });
         const { getFourFactorAssessmentWithReason, getFactorAssessment, getPeriodAssessment } = await import('@/lib/actions/indicators.actions');
         const [factor, legacy, period] = await Promise.all([
-            getFourFactorAssessmentWithReason('VOD.L', { market: 'us', preset: 'short', periods: { T: 7, M: 7, V: 7, R: 7 }, interval: null }),
+            getFourFactorAssessmentWithReason('VOD.L', { version: 2, market: 'us', preset: 'short', periods: { T: 5, M: 7, V: 7, R: 7 }, interval: null }),
             getFactorAssessment('VOD.L'), getPeriodAssessment('VOD.L'),
         ]);
         expect(factor).toMatchObject({ reason: null, candleCount: 270, assessment: { interval: '1d', source: { provider: 'finnhub' } } });
-        expect(factor.assessment?.factors.T.n).toBe(14);
+        expect(factor.assessment?.factors.T.n).toBe(21);
         expect(factor.assessment?.factors.M.score).not.toBeNull();
         expect(legacy?.factors.M.n).toBe(14);
         expect(legacy?.variants).toEqual(period?.variants);
@@ -210,7 +210,7 @@ describe('indicator assessments across markets', () => {
         const finnHub = vi.mocked((await import('@/lib/actions/finnhub.actions')).getCandlesWithReason);
         finnHub.mockClear();
         const { getFourFactorAssessmentWithReason, getFactorAssessment } = await import('@/lib/actions/indicators.actions');
-        const preference = { market: 'us', preset: 'legacy', periods: { T: 14, M: 14, V: 14, R: 14 }, interval: null };
+        const preference = { version: 2, market: 'us', preset: 'legacy', periods: { T: 21, M: 14, V: 14, R: 14 }, interval: null };
         expect(await getFourFactorAssessmentWithReason(symbol as string, preference)).toMatchObject({ assessment: null, reason: 'unsupported-symbol', candleCount: 0 });
         expect(await getFactorAssessment(symbol as string)).toBeNull();
         expect(fetcher).not.toHaveBeenCalled();
@@ -316,8 +316,8 @@ describe('rendered stock details', () => {
             expect(html).toContain('約14天');
             expect(html).toContain('目前套用：');
         }
-        // One request for each market's candles across the concurrently rendered panels.
-        expect(fetcher.mock.calls.filter(([url]) => url.includes('/klines') || url.includes('TaiwanStockPrice'))).toHaveLength(symbol.startsWith('CG:') ? 0 : 1);
+        // Four factors request 800 days independently from the 400-day vote/variant cache.
+        expect(fetcher.mock.calls.filter(([url]) => url.includes('/klines') || url.includes('TaiwanStockPrice'))).toHaveLength(symbol.startsWith('CG:') ? 0 : 2);
     });
 
     it('does not label a provider outage as insufficient history', async () => {

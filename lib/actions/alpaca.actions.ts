@@ -59,7 +59,7 @@ async function alpacaBars(symbol: string, days: number, crypto: boolean, interva
 
 /** Independent four-factor history; daily indicator consumers retain their existing entrypoint. */
 export async function getFactorCandlesWithReason(symbol: string, interval: CryptoInterval): Promise<CandleResult> {
-    if (interval === '1d') return getDailyCandlesWithReason(symbol, 400);
+    if (interval === '1d') return getDailyCandlesWithReason(symbol, 800);
     if (!['4h', '8h', '12h'].includes(interval)) return failure('api-error');
     const market = candleMarket(symbol);
     if (market.kind === 'binance') return binanceIntervalCandles(market.symbol, interval);

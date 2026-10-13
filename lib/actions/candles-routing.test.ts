@@ -239,13 +239,21 @@ describe('recent closed crypto factor candles', () => {
         expect(fallback).not.toHaveBeenCalled();
     });
 
-    it('reuses daily cache and the existing 400-day request for 1d', async () => {
+    it('uses separate 800-day factor and 400-day vote daily histories', async () => {
         const fetcher = vi.fn().mockResolvedValue(response([BAR]));
         vi.stubGlobal('fetch', fetcher);
         const { getFactorCandlesWithReason, getDailyCandlesWithReason } = await import('./alpaca.actions');
-        expect(await getFactorCandlesWithReason('BINANCE:BTCUSDT', '1d')).toEqual(await getDailyCandlesWithReason('BINANCE:BTCUSDT', 400));
-        expect(fetcher).toHaveBeenCalledTimes(1);
-        expect(new URL(fetcher.mock.calls[0][0]).searchParams.get('interval')).toBe('1d');
+        expect((await getFactorCandlesWithReason('BINANCE:BTCUSDT', '1d')).reason).toBeNull();
+        expect((await getDailyCandlesWithReason('BINANCE:BTCUSDT', 400)).reason).toBeNull();
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        const starts = fetcher.mock.calls.map(([url]) => Number(new URL(url).searchParams.get('startTime')));
+        const now = Date.now();
+        const day = 86400_000;
+        expect(starts).toEqual([
+            Math.floor(now / day) * day - 800 * day,
+            Math.floor(now / day) * day - 400 * day,
+        ]);
+        expect(fetcher.mock.calls.every(([url]) => new URL(url).searchParams.get('interval') === '1d')).toBe(true);
     });
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
