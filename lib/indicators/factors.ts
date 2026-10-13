@@ -2,8 +2,7 @@
  * v1.1 四因素計算引擎：T（趨勢）、M（動能）、V（量能）、R（波動風險）。
  *
  * 公式逐字採用規格書 §4.2（task-1-brief.md）：
- * - T = ADX × (+DI − −DI) / (+DI + −DI)，其中 DX = 100×|+DI−(−DI)|/(+DI+(−DI))、
- *   ADX = RMA(DX, n)；分母為 0 → score = null
+ * - T = (SMA(round(50n/21)) − SMA(round(200n/21))) / ATR(n)；ATR=0 → null
  * - M = 2 × RSI − 100，RSI = 100 − 100/(1+RS)（Wilder RS）
  * - V = 100 × CMF，MFM = (2C−H−L)/(H−L)（H=L 時 MFM = 0）、CMF = Σ(MFM×VOL)/Σ(VOL)（n 期）
  * - R = 100 × percentile(ATR%_n, 過去 252 根)；ATR% = 100×ATR/C，ATR = RMA(TR, n)；
@@ -14,7 +13,7 @@
  */
 import type { Candle } from './types';
 import type { FactorPeriods } from './factor-periods';
-import { wilderSmooth } from './math';
+import { sma, wilderSmooth } from './math';
 
 /** 四因素代號。 */
 export type FactorId = 'T' | 'M' | 'V' | 'R';
@@ -22,7 +21,7 @@ export type FactorId = 'T' | 'M' | 'V' | 'R';
 /** 單一因素的計算結果。 */
 export interface FactorScore {
   id: FactorId;
-  /** 標準化分數；資料不足或公式無定義時為 null（R：0–100；T/M/V：−100–100）。 */
+  /** T 為有號 ATR 倍數（不設上下界）；M/V 為 −100–100，R 為 0–100；無定義時 null。 */
   score: number | null;
   /** 計算期間。 */
   n: number;
@@ -54,6 +53,7 @@ const R_MIN_HISTORY = 126;
  *（與 v1.0 trend.ts／momentum.ts 的 Wilder 實作同規格）。
  */
 const FORMULA_VERSION = 'wilder-rma-v1';
+const TREND_FORMULA_VERSION = 'sma-spread-atr-v2';
 
 /** 顯示用數字格式（reason 文字）。 */
 function fmt(x: number, digits = 2): string {
@@ -69,9 +69,10 @@ function nullScore(
   n: number,
   reason: string,
   sampleCount?: number,
+  formulaVersion = FORMULA_VERSION,
 ): FactorScore {
   return {
-    id, score: null, n, formulaVersion: FORMULA_VERSION, reason,
+    id, score: null, n, formulaVersion, reason,
     ...(sampleCount === undefined ? {} : { sampleCount }),
   };
 }
@@ -120,71 +121,49 @@ function percentileAverageRank(values: number[], x: number): number {
 }
 
 /* ------------------------------------------------------------------ */
-/* T：趨勢（ADX + DMI）                                                */
+/* T：波動率標準化均線乖離                                              */
 /* ------------------------------------------------------------------ */
 
 /**
- * T = ADX × (+DI − −DI) / (+DI + −DI)。
- * ±DI 與 DX 皆採 Wilder 平滑；分母（+DI + −DI）為 0 → null。
- * ADX 需要 n 個 DX 值做 Wilder 平滑，故至少需要 2n 根 K 線。
+ * N 是 ATR 根數；21 對應 SMA50 / SMA200 / ATR21。
  */
+export function trendWindows(n: number): { short: number; long: number; atr: number } {
+  return { short: Math.round(50 * n / 21), long: Math.round(200 * n / 21), atr: n };
+}
+
 function computeT(candles: Candle[], n: number): FactorScore {
   const len = candles.length;
-  if (!validPeriod(n)) {
-    return nullScore('T', n, `計算期間 n=${n} 無效，T 無法計算`);
+  if (!validPeriod(n) || n < 5 || n > 50) {
+    return nullScore('T', n, `趨勢 ATR 期間 n=${n} 無效（需為 5–50）`, undefined, TREND_FORMULA_VERSION);
   }
-  if (len < 2 * n) {
+  const { short, long } = trendWindows(n);
+  if (len < long) {
     return nullScore(
       'T',
       n,
-      `資料不足：T（ADX/DMI）需要至少 ${2 * n} 根 K 線，目前 ${len} 根`,
+      `資料不足：SMA${long} 需要至少 ${long} 根 K 線，目前 ${len} 根`,
+      undefined,
+      TREND_FORMULA_VERSION,
     );
   }
-  const plusDM: number[] = [];
-  const minusDM: number[] = [];
+  const closes = candles.map(candle => candle.c);
+  const shortSma = sma(closes, short) as number;
+  const longSma = sma(closes, long) as number;
   const tr: number[] = [];
   for (let i = 1; i < len; i++) {
-    const cur = candles[i];
-    const prev = candles[i - 1];
-    const upMove = cur.h - prev.h;
-    const downMove = prev.l - cur.l;
-    // Wilder 規則：只保留為正且較大的那一邊
-    plusDM.push(upMove > downMove && upMove > 0 ? upMove : 0);
-    minusDM.push(downMove > upMove && downMove > 0 ? downMove : 0);
-    tr.push(trueRange(cur, prev.c));
+    tr.push(trueRange(candles[i], candles[i - 1].c));
   }
-  const sTR = wilderSeries(tr, n);
-  const sPlus = wilderSeries(plusDM, n);
-  const sMinus = wilderSeries(minusDM, n);
-  const last = tr.length - 1;
-  const str = sTR[last] as number;
-  // TR 全為 0（極端全平盤）時 ±DI 定義為 0，避免除零
-  const plusDI = str === 0 ? 0 : (100 * (sPlus[last] as number)) / str;
-  const minusDI = str === 0 ? 0 : (100 * (sMinus[last] as number)) / str;
-  const denom = plusDI + minusDI;
-  if (denom === 0) {
-    return nullScore('T', n, '+DI 與 −DI 皆為 0（分母為零），T 無法計算');
+  const atr = wilderSmooth(tr, n);
+  if (atr === null || atr <= 0 || !Number.isFinite(atr)) {
+    return nullScore('T', n, `ATR(${n}) 為零或無定義，T 無法計算`, undefined, TREND_FORMULA_VERSION);
   }
-  // DX 序列：從 ±DI 首次有定義的位置開始
-  const dx: number[] = [];
-  for (let i = n - 1; i < tr.length; i++) {
-    const t = sTR[i] as number;
-    const p = t === 0 ? 0 : (100 * (sPlus[i] as number)) / t;
-    const m = t === 0 ? 0 : (100 * (sMinus[i] as number)) / t;
-    dx.push(p + m === 0 ? 0 : (100 * Math.abs(p - m)) / (p + m));
-  }
-  // dx 長度 = len − n ≥ n（因 len ≥ 2n），wilderSmooth 必有值
-  const adx = wilderSmooth(dx, n) as number;
-  const score = (adx * (plusDI - minusDI)) / denom;
+  const score = (shortSma - longSma) / atr;
   return {
     id: 'T',
     score,
     n,
-    formulaVersion: FORMULA_VERSION,
-    reason:
-      `T = ADX(${n}) × (+DI − −DI) ÷ (+DI + −DI)` +
-      ` = ${fmt(adx)} × ${fmt(plusDI - minusDI)} ÷ ${fmt(denom)}` +
-      ` = ${fmt(score)}`,
+    formulaVersion: TREND_FORMULA_VERSION,
+    reason: `(SMA${short} ${fmt(shortSma)} − SMA${long} ${fmt(longSma)}) ÷ ATR(${n}) ${fmt(atr)} = ${fmt(score)} 倍 ATR`,
   };
 }
 
@@ -345,7 +324,7 @@ function computeR(candles: Candle[], n: number): FactorScore {
  */
 export function computeFactors(
   candles: Candle[],
-  periods: number | FactorPeriods = DEFAULT_N,
+  periods: number | FactorPeriods = { T: 21, M: DEFAULT_N, V: DEFAULT_N, R: DEFAULT_N },
 ): FourFactors {
   const ns = typeof periods === 'number'
     ? { T: periods, M: periods, V: periods, R: periods }

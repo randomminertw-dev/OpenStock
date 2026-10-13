@@ -110,6 +110,7 @@ export function computeIDS(results: IndicatorResult[]): IDSResult {
 
 /** Level 3 中立區門檻 τ_F（v1.1 MVP；規格 §6.5.3：訓練期決定）。 */
 const FACTOR_NEUTRAL_THRESHOLD = 5;
+const TREND_NEUTRAL_ATR = 1;
 
 /** 變體指標家族對應的六大類（僅供 IndicatorResult 記帳，公式不使用）。 */
 const CATEGORY_BY_VARIANT: Record<VariantIndicatorId, Category> = {
@@ -176,9 +177,9 @@ export function computeIDSPeriod(variants: VariantResult[]): IDSPeriodResult {
  * 因素方向票：s_F = sign(score_F)，|score| ≤ τ_F 視為中立，
  * score 為 null 時不投票。
  */
-function factorSignal(score: number | null): Signal | null {
+function factorSignal(score: number | null, id: 'T' | 'M' | 'V'): Signal | null {
   if (score === null) return null;
-  if (Math.abs(score) <= FACTOR_NEUTRAL_THRESHOLD) return 0;
+  if (Math.abs(score) <= (id === 'T' ? TREND_NEUTRAL_ATR : FACTOR_NEUTRAL_THRESHOLD)) return 0;
   return score > 0 ? 1 : -1;
 }
 
@@ -201,7 +202,7 @@ export function computeIDSFactor(factors: {
   ];
   const votes: IndicatorResult[] = [];
   for (const [id, f] of entries) {
-    const signal = factorSignal(f.score);
+    const signal = factorSignal(f.score, id);
     if (signal === null) continue; // score 為 null：不投票
     votes.push({
       id: `FACTOR_${id}`,

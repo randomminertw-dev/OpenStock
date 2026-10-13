@@ -38,10 +38,18 @@ function makeRSI70(): Candle[] {
 function makeTrend(n: number, dir: 1 | -1): Candle[] {
   const out: Candle[] = [];
   for (let i = 0; i < n; i++) {
-    const c = 100 + dir * 2 * i;
+    const c = (dir === 1 ? 100 : 1000) + dir * 2 * i;
     out.push({ t: i, o: c - dir * 0.2, h: c + 0.5, l: c - 0.5, c, v: 1000 });
   }
   return out;
+}
+
+/** Close rises/falls by 1; H/L are ±1, making each true range exactly 2. */
+function makeSpreadTrend(length: number, direction: 1 | -1): Candle[] {
+  return Array.from({ length }, (_, i) => {
+    const c = (direction === 1 ? 100 : 1000) + direction * i;
+    return { t: i, o: c, h: c + 1, l: c - 1, c, v: 1000 };
+  });
 }
 
 /** 全平盤假資料：H = L，每根 o = h = l = c。 */
@@ -62,14 +70,27 @@ describe('computeFactors — brief 逐字斷言', () => {
     expect(Math.abs((M.score as number) - 40)).toBeLessThan(0.01);
   });
 
-  it('+DI >> −DI 的趨勢資料 → T > 0；反之 T < 0', () => {
-    const up = computeFactors(makeTrend(40, 1));
+  it('SMA50−SMA200 除以 ATR21 保留趨勢正負方向', () => {
+    const up = computeFactors(makeSpreadTrend(220, 1), { T: 21, M: 14, V: 14, R: 14 });
     expect(up.T.score).not.toBeNull();
-    expect(up.T.score as number).toBeGreaterThan(0);
+    expect(up.T.score).toBeCloseTo(37.5, 8);
+    expect(up.T.reason).toContain('SMA50');
+    expect(up.T.reason).toContain('SMA200');
+    expect(up.T.reason).toContain('ATR(21)');
 
-    const down = computeFactors(makeTrend(40, -1));
-    expect(down.T.score).not.toBeNull();
-    expect(down.T.score as number).toBeLessThan(0);
+    const down = computeFactors(makeSpreadTrend(220, -1), { T: 21, M: 14, V: 14, R: 14 });
+    expect(down.T.score).toBeCloseTo(-37.5, 8);
+  });
+
+  it('趨勢 N 同步縮放兩條 SMA，N=5/42 對應 12/48 與 100/400', () => {
+    const short = computeFactors(makeSpreadTrend(100, 1), { T: 5, M: 14, V: 14, R: 14 });
+    expect(short.T.score).toBeCloseTo(9, 8);
+    expect(short.T.reason).toContain('SMA12');
+    expect(short.T.reason).toContain('SMA48');
+    const long = computeFactors(makeSpreadTrend(420, 1), { T: 42, M: 14, V: 14, R: 14 });
+    expect(long.T.score).toBeCloseTo(75, 8);
+    expect(long.T.reason).toContain('SMA100');
+    expect(long.T.reason).toContain('SMA400');
   });
 
   it('H=L 全平盤 → V 的 MFM=0，不崩潰', () => {
@@ -92,7 +113,7 @@ describe('computeFactors — 邊界', () => {
       expect(actual[id]).toEqual(computeFactors(candles, periods[id])[id]);
       expect(actual[id].n).toBe(periods[id]);
     }
-    expect(computeFactors(candles)).toEqual(computeFactors(candles, 14));
+    expect(computeFactors(candles).M).toEqual(computeFactors(candles, 14).M);
   });
 
   it('exposes the actual R percentile sample count including warmup and cap', () => {
@@ -107,14 +128,17 @@ describe('computeFactors — 邊界', () => {
     expect(computeFactors(makeFlat(150)).R.reason).toContain('136');
   });
 
-  it('T：+DI 與 −DI 皆為 0（全平盤）→ 分母為零 → score=null', () => {
-    const { T } = computeFactors(makeFlat(40));
+  it('T：ATR 為零時不除零並回傳 N/A', () => {
+    const { T } = computeFactors(makeFlat(220), { T: 21, M: 14, V: 14, R: 14 });
     expect(T.score).toBeNull();
+    expect(T.reason).toContain('ATR');
   });
 
-  it('T：資料不足（少於 2n 根）→ score=null', () => {
-    const { T } = computeFactors(makeTrend(10, 1));
+  it('T：少於 SMA200 所需 200 根時 N/A，其餘因素繼續計算', () => {
+    const { T, M } = computeFactors(makeSpreadTrend(199, 1), { T: 21, M: 14, V: 14, R: 14 });
     expect(T.score).toBeNull();
+    expect(T.reason).toContain('200');
+    expect(M.score).not.toBeNull();
   });
 
   it('M：全程上漲 → RSI=100 → M=100', () => {
@@ -137,7 +161,7 @@ describe('computeFactors — 邊界', () => {
   it('所有因素皆回傳繁體中文 reason、n 與 formulaVersion', () => {
     const f = computeFactors(makeTrend(150, 1));
     for (const s of [f.T, f.M, f.V, f.R]) {
-      expect(s.n).toBe(14);
+      expect(s.n).toBe(s.id === 'T' ? 21 : 14);
       expect(typeof s.formulaVersion).toBe('string');
       expect(s.formulaVersion.length).toBeGreaterThan(0);
       expect(typeof s.reason).toBe('string');

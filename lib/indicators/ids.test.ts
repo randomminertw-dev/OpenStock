@@ -292,9 +292,9 @@ describe('computeIDSFactor — 規格 §6.5.3', () => {
     expectPctClose(r.idsPct, 100.0);
   });
 
-  it('|score|≤5 視為中立票（邊界值 ±5 亦然）', () => {
+  it('T 的正負 1 倍 ATR 與 M/V 的正負 5 分各自視為中立', () => {
     const r = computeIDSFactor({
-      T: factorFixture('T', 5),
+      T: factorFixture('T', 1),
       M: factorFixture('M', -5),
       V: factorFixture('V', 70),
     });
@@ -302,6 +302,17 @@ describe('computeIDSFactor — 規格 §6.5.3', () => {
     // 票：0、0、+1 → A=1，IDS = 100×(1−1/1) = 0
     expectPctClose(r.idsPct, 0.0);
     expect(r.neutralPct).toBeCloseTo(66.67, 2);
+  });
+
+  it('T 超出 1 倍 ATR 即投方向票，即使絕對值仍低於舊門檻 5', () => {
+    const r = computeIDSFactor({
+      T: factorFixture('T', -1.1),
+      M: factorFixture('M', 5),
+      V: factorFixture('V', 6),
+    });
+    expect(r.downPct).toBeCloseTo(33.33, 2);
+    expect(r.upPct).toBeCloseTo(33.33, 2);
+    expect(r.neutralPct).toBeCloseTo(33.33, 2);
   });
 
   it('三個全 null → idsPct 為 null，validCount 為 0', () => {
