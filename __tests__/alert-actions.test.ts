@@ -7,7 +7,7 @@ const requireUserId = vi.fn();
 vi.mock('@/lib/better-auth/auth', () => ({ requireUserId: () => requireUserId() }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/database/mongoose', () => ({ connectToDatabase: vi.fn().mockResolvedValue({}) }));
-// Alerts are an OpenStock Cloud feature; most tests run with it on
+// Alerts require realtime mode; most tests run with it on.
 const flags = { alertsEnabled: true };
 vi.mock('@/lib/market-data', () => ({ get alertsEnabled() { return flags.alertsEnabled; } }));
 
@@ -52,10 +52,10 @@ describe('alert actions are scoped to the session user', () => {
         expect(create).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-123', symbol: 'AAPL' }));
     });
 
-    it('refuses new alerts where Cloud features are off', async () => {
+    it('refuses new alerts when realtime mode is off', async () => {
         flags.alertsEnabled = false;
         try {
-            await expect(createAlert({ symbol: 'AAPL', targetPrice: 200, condition: 'ABOVE' })).rejects.toThrow('OpenStock Cloud');
+            await expect(createAlert({ symbol: 'AAPL', targetPrice: 200, condition: 'ABOVE' })).rejects.toThrow('realtime mode enabled');
             expect(create).not.toHaveBeenCalled();
         } finally {
             flags.alertsEnabled = true;
