@@ -381,6 +381,26 @@ Package scripts
   - Scoped synchronization: `npm run taiwan:sync -- --apply --target production --symbols TWSE:2330,TWSE:0050 --days 800`
   - Supported flags: `--dry-run`, `--apply`, `--target <label>`, `--symbols <list>`, `--days <1-1000>`, `--close`, `--catalog`, `--details`, `--history`
 
+### Taiwan data initialization
+
+The Taiwan pages read the official catalog and daily history from MongoDB. A deployment alone does not populate these collections, and background synchronization is disabled by default. Finnhub results for an English query such as `taiwan` do not confirm that the official catalog is ready.
+
+The CLI loads the same env files as Next.js before starting its database worker; explicitly supplied environment variables take precedence. Confirm that `MONGODB_URI` points to the database used by the website and that the bounded sync budgets fit the existing free allowances. `--target` is a label, **not** a database selector; `--target local` uses a temporary in-memory repository and does not initialize the website's MongoDB.
+
+First inspect the intended work without network requests or database writes:
+
+```bash
+npm run taiwan:sync -- --dry-run --catalog --close --details --history --symbols TWSE:2330 --days 800
+```
+
+After confirming the database target and free quotas, initialize the catalog and the scoped analysis data:
+
+```bash
+npm run taiwan:sync -- --apply --target website --catalog --close --details --history --symbols TWSE:2330 --days 800
+```
+
+`--symbols` scopes history and details; catalog/close synchronization uses whole-market endpoints. The request and storage budgets still apply, so history may need another run. The default command with only `--symbols` loads history, **not** the catalog. An empty or unreadable catalog now returns a readable search status, rather than throwing an error whose message Next.js hides in production. No synchronization or deployment is performed automatically by these instructions.
+
 Developer experience
 - TypeScript strict mode
 - Tailwind CSS v4 (no separate tailwind.config needed)

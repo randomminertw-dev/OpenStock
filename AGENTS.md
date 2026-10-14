@@ -50,3 +50,4 @@ Vitest 使用 Node 環境；測試檔命名為 `*.test.ts`，放在模組旁或 
 - 日 K 按市場分流：Binance 原交易對、FinMind 台股、Alpaca 美股／CG；錯誤原因須保留至 UI。台股／crypto 不與 SPY 尾端錯位比較；跨市場驗收執行 `__tests__/market-indicators.test.tsx`，即時來源驗證另見 README。
 - 2026-10-14：台股遷移官方來源（TWSE／TPEX）：成交量採精確股數（成交股數），日 K 為未調整價、Asia/Taipei 日界；OpenAPI 快照 complete: false，盤後歷史確認後 complete: true，無資料保留 N/A 不填假 K 線。
 - 2026-10-14：台股日 K 優先讀取 MongoDB 官方歷史，過渡旗標保留 TAIWAN_CANDLE_PROVIDER=official|finmind（預設 official），官方失敗不自動 fallback；背景同步預設 disabled，正式部署前只在本機 dry-run 驗證，禁止主動 push/deploy。
+- 2026-10-14：台股索引未初始化／讀取失敗不能用 thrown Server Action 傳使用者訊息（production 會遮蔽）；搜尋改用結構化結果，無報價頁面不宣稱有收盤。CLI 在 fork 前載入 Next env；初始化須含 --catalog，--target 僅標籤、local 為非持久測試資料庫。

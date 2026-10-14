@@ -92,7 +92,7 @@ export default function TaiwanHistoryStatus({
         return (
             <div className="card p-3 flex items-center gap-2 text-xs text-faint mb-3">
                 <Database className="size-4 shrink-0" />
-                <span>台股歷史同步尚未啟用（目前僅提供最新收盤報價）</span>
+                <span>台股歷史同步尚未啟用</span>
             </div>
         );
     }

@@ -62,6 +62,14 @@ export default async function StockDetails({ params }: StockDetailsPageProps) {
                     symbol={symbol}
                     isInWatchlist={isInWatchlist}
                 />
+                {quote?.price == null && history.bars.length === 0 && (
+                    <div className="card p-4 mb-3" role="status">
+                        <p className="text-sm font-semibold">官方台股資料尚未準備完成</p>
+                        <p className="text-xs text-faint mt-1">
+                            目前尚未取得此商品的官方收盤與歷史資料，完成資料同步後即可顯示報價與分析。
+                        </p>
+                    </div>
+                )}
                 <TaiwanHistoryStatus symbol={symbol} initial={history.status} />
 
                 <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">

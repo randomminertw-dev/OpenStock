@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { CommandDialog, CommandEmpty, CommandInput, CommandList } from "@/components/ui/command"
 import { ArrowUpRight, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { searchStocks } from "@/lib/actions/finnhub.actions";
+import { searchStocksWithStatus } from "@/lib/actions/finnhub.actions";
 import { useDebounce } from "@/hooks/useDebounce";
 
 const OPEN_SEARCH_EVENT = 'open-search';
@@ -119,18 +119,14 @@ export default function SearchCommand({
         const seq = ++searchSeqRef.current;
         setLoading(true);
         try {
-            const results = await searchStocks(searchTerm.trim());
+            const result = await searchStocksWithStatus(searchTerm.trim());
             if (seq === searchSeqRef.current) {
-                setErrorMessage(null);
-                setStocks(results);
+                setErrorMessage(result.error);
+                setStocks(result.stocks);
             }
-        } catch (err: unknown) {
+        } catch {
             if (seq === searchSeqRef.current) {
-                const message =
-                    err instanceof Error && err.message
-                        ? err.message
-                        : '台股資料庫準備中或同步未啟用';
-                setErrorMessage(message);
+                setErrorMessage('搜尋暫時無法使用，請稍後再試。');
                 setStocks([]);
             }
         } finally {

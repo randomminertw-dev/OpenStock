@@ -404,6 +404,13 @@ describe('Taiwan native components and stock page', () => {
     });
 
     describe('Page integration for Taiwan symbols', () => {
+        it('explains unavailable official data without claiming a closing quote exists', async () => {
+            const jsx = await StockDetails({ params: Promise.resolve({ symbol: 'TWSE:2330' }) });
+            const html = renderToStaticMarkup(await resolveServerTree(jsx));
+            expect(html).toContain('官方台股資料尚未準備完成');
+            expect(html).not.toContain('目前僅提供最新收盤報價');
+        });
+
         it('renders 0050 with official closing date, ETF info, TV supplementary quote, and no 1h TV technicals', async () => {
             const sec: TaiwanSecurity = {
                 exchange: 'TWSE',

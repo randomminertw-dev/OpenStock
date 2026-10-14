@@ -173,6 +173,36 @@ describe('Taiwan search and reads', () => {
         expect(String(thrownError)).not.toContain('MongoNetworkError');
     });
 
+    it('returns a serializable readiness message for an empty official catalog', async () => {
+        const { setTaiwanRepositoryForTesting } = await import('../taiwan/reads');
+        setTaiwanRepositoryForTesting(createInMemoryTaiwanRepository());
+        const { searchStocksWithStatus } = await import('./finnhub.actions');
+        const response = await searchStocksWithStatus('2330');
+        expect(JSON.parse(JSON.stringify(response))).toEqual({
+            stocks: [],
+            error: '官方台股資料尚未初始化或暫時無法讀取，請稍後再試。',
+        });
+    });
+
+    it('does not expose database errors through the search response', async () => {
+        const { setTaiwanRepositoryForTesting } = await import('../taiwan/reads');
+        setTaiwanRepositoryForTesting({
+            ...createInMemoryTaiwanRepository(),
+            async readCatalog() { throw new Error('MongoNetworkError: private-host'); },
+        });
+        const { searchStocksWithStatus } = await import('./finnhub.actions');
+        const response = await searchStocksWithStatus('0050');
+        expect(response.error).toBe('官方台股資料尚未初始化或暫時無法讀取，請稍後再試。');
+        expect(JSON.stringify(response)).not.toContain('private-host');
+    });
+
+    it('preserves code search results in the structured response after initialization', async () => {
+        const { searchStocksWithStatus } = await import('./finnhub.actions');
+        const response = await searchStocksWithStatus('2330');
+        expect(response.error).toBeNull();
+        expect(response.stocks[0]).toMatchObject({ symbol: 'TWSE:2330', name: '台積電' });
+    });
+
     it('reads Taiwan security, quote, history, and details from reads.ts repository reader', async () => {
         await repo.writeBars([
             {

@@ -476,3 +476,20 @@ export const searchStocks = cache(async (query?: string): Promise<StockWithWatch
         return [];
     }
 });
+
+/** Expected readiness failures must cross the server-action boundary as data.
+ * Production Next.js redacts messages on thrown errors before the client sees them.
+ */
+export async function searchStocksWithStatus(query?: string): Promise<{
+    stocks: StockWithWatchlistStatus[];
+    error: string | null;
+}> {
+    try {
+        return { stocks: await searchStocks(query), error: null };
+    } catch {
+        return {
+            stocks: [],
+            error: '官方台股資料尚未初始化或暫時無法讀取，請稍後再試。',
+        };
+    }
+}
