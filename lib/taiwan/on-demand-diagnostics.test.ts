@@ -29,16 +29,32 @@ describe('safe diagnostics for deployed Taiwan loading failures', () => {
 
     it('distinguishes a database operation failure without logging its sensitive message', async () => {
         const repo = createInMemoryTaiwanRepository();
-        repo.readCatalog = async () => { throw Object.assign(new Error('mongodb://private-password@private-host'), { code: 13 }); };
+        repo.reserveUsage = async () => { throw Object.assign(new Error('mongodb://private-password@private-host'), { code: 13 }); };
         const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
         const loader = createTaiwanOnDemand({ repo });
         await expect(loader.catalog()).rejects.toThrow();
-        expect((await loader.history(key, 800)).status.reason).toBe('missing-config');
+        expect((await loader.history(key, 800)).status.reason).toBe('api-error');
         expect(warning).toHaveBeenCalledWith('[taiwan-data]', expect.objectContaining({
-            event: 'cache-failure', operation: 'readCatalog', code: 13,
+            event: 'cache-failure', operation: 'reserveUsage', code: 13,
+        }));
+        expect(warning).toHaveBeenCalledWith('[taiwan-data]', expect.objectContaining({
+            event: 'cache-blocked', operation: 'reserveUsage', cause: 'operation-failed', code: 13,
         }));
         expect(JSON.stringify(warning.mock.calls)).not.toContain('private-password');
         expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('continues official loading when catalog reads fail but shared quota operations work', async () => {
+        const repo = createInMemoryTaiwanRepository();
+        repo.readCatalog = async () => { throw new Error('catalog query failed'); };
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(
+            url.includes('t187ap03_L') ? [{ '公司代號': '2330', '公司簡稱': '台積電' }] : []
+        ))));
+        const loader = createTaiwanOnDemand({ repo });
+        expect((await loader.catalog()).some(s => s.code === '2330')).toBe(true);
+        expect(warning).toHaveBeenCalledWith('[taiwan-data]', expect.objectContaining({
+            event: 'cache-failure', operation: 'readCatalog',
+        }));
     });
 
     it('distinguishes official HTTP rejection from a configuration failure', async () => {

@@ -47,28 +47,40 @@ function automaticRequest(repo: TaiwanRepository) {
 
 /** Cache failure must not leave an official-data request waiting for MongoDB's long timeout. */
 function optionalPersistence(repository: TaiwanRepository): TaiwanRepository {
-    let unavailableUntil = 0;
+    const failures = new Map<PropertyKey, { until: number; reason: TaiwanSourceError['reason']; cause: string; code?: number }>();
     return new Proxy(repository, {
         get(target, property) {
             const operation = Reflect.get(target, property);
             if (typeof operation !== 'function') return operation;
             return async (...args: unknown[]) => {
-                if (unavailableUntil > Date.now()) throw new TaiwanSourceError('missing-config', 'Cache unavailable');
+                const failure = failures.get(property);
+                if (failure && failure.until > Date.now()) {
+                    console.warn('[taiwan-data]', { event: 'cache-blocked', operation: String(property),
+                        reason: failure.reason, cause: failure.cause, code: failure.code,
+                        retryAfterMs: failure.until - Date.now() });
+                    throw new TaiwanSourceError(failure.reason, 'Cache operation temporarily unavailable');
+                }
                 let timer: ReturnType<typeof setTimeout> | undefined;
                 let timedOut = false;
                 const started = Date.now();
                 try {
-                    return await Promise.race([
+                    const value = await Promise.race([
                         Reflect.apply(operation, target, args),
                         new Promise<never>((_, reject) => { timer = setTimeout(() => { timedOut = true; reject(new Error('Cache timeout')); }, 1500); }),
                     ]);
+                    failures.delete(property);
+                    return value;
                 } catch (error) {
-                    unavailableUntil = Date.now() + 60_000;
-                    const code = (error as { code?: unknown } | null)?.code;
+                    const rawCode = (error as { code?: unknown } | null)?.code;
+                    const code = typeof rawCode === 'number' ? rawCode : undefined;
+                    const reason = error instanceof TaiwanSourceError ? error.reason : 'api-error';
+                    const cause = timedOut ? 'cache-timeout' : error instanceof TaiwanSourceError ? error.reason : 'operation-failed';
+                    // Cache reads and writes cannot disable a healthy shared quota ledger.
+                    // A failed quota operation still blocks new upstream work.
+                    failures.set(property, { until: Date.now() + 60_000, reason, cause, code });
                     // Never print MongoDB messages, connection strings, or environment values.
                     console.warn('[taiwan-data]', { event: 'cache-failure', operation: String(property),
-                        reason: timedOut ? 'cache-timeout' : error instanceof TaiwanSourceError ? error.reason : 'operation-failed',
-                        code: typeof code === 'number' ? code : undefined, elapsedMs: Date.now() - started });
+                        reason: cause, code, elapsedMs: Date.now() - started });
                     throw error;
                 } finally { if (timer) clearTimeout(timer); }
             };
