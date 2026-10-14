@@ -21,6 +21,7 @@ import TaiwanChart from "@/components/stocks/TaiwanChart";
 import TaiwanDetails from "@/components/stocks/TaiwanDetails";
 import TaiwanHistoryStatus from "@/components/stocks/TaiwanHistoryStatus";
 import { getTaiwanPageData } from "@/lib/actions/taiwan.actions";
+import ResearchReportPanel from "@/components/stocks/ResearchReportPanel";
 
 const scriptUrl = `https://s3.tradingview.com/external-embedding/embed-widget-`;
 
@@ -36,9 +37,12 @@ async function Sentiment({ symbol }: { symbol: string }) {
 
 async function Factors({ symbol }: { symbol: string }) {
     return (
-        <Panel title="技術指標投票" sub="57 項指標分歧監控 · IDS">
-            <IndicatorDashboard symbol={symbol} />
-        </Panel>
+        <>
+            <Panel title="技術指標投票" sub="57 項指標分歧監控 · IDS">
+                <IndicatorDashboard symbol={symbol} />
+            </Panel>
+            <ResearchReportPanel symbol={symbol} />
+        </>
     );
 }
 

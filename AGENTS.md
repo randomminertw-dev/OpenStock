@@ -56,3 +56,4 @@ Vitest 使用 Node 環境；測試檔命名為 `*.test.ts`，放在模組旁或 
 - 2026-10-14：正式站登入實測：2330／0050／6488 搜尋失敗、AAPL 正常，歷史重試回傳 missing-config、0/27 批次；本機官方名錄與 2330 歷史 HTTP 200。部分 TAIWAN_MAX_* 設定與 MongoDB 1.5 秒保護都可產生相同症狀，不能逕認官方限流；新增 [taiwan-data] 安全診斷，正式站唯一原因仍待 Vercel 設定／日誌確認。
 - 2026-10-14：0/251/502/753 ms 的 missing-config 請求序列符合資料庫保護阻擋，非官方 HTTP 限流證據。修正全域快取熔斷為各操作獨立：readCatalog 失敗不可封鎖健康的 reserveUsage；額度帳本失敗仍禁止外部請求。cache-blocked 保留 cause/code，通用資料庫錯誤不改標 missing-config；正式站最初失敗操作仍待日誌驗收。
 - 2026-10-14：正式站 budget-limit 無 HTTP status 是應用每日限制；535 根 K／26/27 批次不代表名錄搜尋可用。搜尋與商品解析先依 query 讀取持久名錄，不下載全市場或消耗外部額度；全表／條件查詢分開保護，部分結果不當作完整市場快取。未快取商品保留 catalog-budget-limit 提示，不提高額度；加入 watchlist 與搜尋失敗的因果未確認。
+- 2026-10-15：新增按需規則式研究報告；日 K 視窗固定最後完整交易日，報告 hash 含實際計算視窗；版本限同標的，發布以 MongoDB transaction 同時驗租約並保存，過期 worker 不得發布。無手動初始化、無新增付費服務；未 push/deploy。

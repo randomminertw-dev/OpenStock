@@ -440,3 +440,16 @@ This project is a modified fork of [OpenStock](https://github.com/Open-Dev-Socie
 - shadcn/ui, Radix UI, Tailwind CSS, Next.js community
 - Inngest for dependable background jobs and workflows
 - Better Auth for simple and secure authentication
+
+## 自動研究報告（MVP）
+
+在股票／加密貨幣詳情頁的技術指標區塊下方，點選「產生分析報告」。系統沿用現有行情服務與 57 指標、T/M/V/R、三層 IDS 引擎，產生九節繁體中文報告，提供多空證據、衝突、來源明確的支撐壓力及條件式情境。初次開啟只讀取已保存報告，不自動產生；行情失敗時保留舊版。可切換最近五個版本並下載 Markdown。
+
+- 固定完整日 K：crypto 排除當日 UTC K；台美股以來源時區排除當地 18:00 前的當日 K（保守截止政策，非交易所假日／延遲發布保證）。所有計算共用同一截止資料；57 指標與 IDS-Period 使用最後完整日 K 往前 400 個曆日，四因素使用最多 800 個曆日的既有來源資料。
+- 四因素主分析沿用已保存 N；crypto 即使偏好盤中週期，報告仍使用日 K 並顯示提醒。短／中／長線採既有標準參數組，代表技術觀察，不代表預測報酬期限。R 不投方向票；資料不足、全中立、ATR 無方向分開顯示。
+- 每個帳號每 60 秒最多接受一次生成，執行租約 120 秒；租約失效的請求不能發布。相同輸入雜湊與規則版本沿用既有報告；完整保存後才回傳成功。快照／報告上限 256 KiB。
+- 報告按登入帳號隔離。既有 MongoDB 自動建立 `research_reports`、`research_report_requests` collections／indexes，無需手動初始化、額外 API key 或新增環境變數。發布使用 MongoDB transaction，需要 replica set（MongoDB Atlas 支援）；standalone MongoDB 不支援交易時會回傳保存失敗並保留舊版。
+- 保存計算輸入、資料日期、來源、規則版本、引擎版本及輸入雜湊；程式版號取 `VERCEL_GIT_COMMIT_SHA`／`GIT_COMMIT_SHA`，未提供時顯示 unavailable。保存的快照可重現文字報告，未另存整套原始 K 線，無法據此重跑歷史行情計算。介面只列最近五版，並未自動刪除更舊報告；租約文件 TTL 為一天。
+- 規則與 ATR% 風險門檻尚未經預測回測校準；不提供勝率、上漲機率或保證目標價。沒有新增 LLM、VM、排程或付費服務；按需讀取與保存仍會使用既有行情及 MongoDB／Vercel 額度。
+
+實作位置：`lib/analysis/`、`lib/actions/research-report.actions.ts`、`components/stocks/ResearchReportPanel.tsx`。本機驗證：`npx vitest run lib/analysis lib/actions/research-report.actions.test.ts __tests__/research-report-ui.test.tsx`。
