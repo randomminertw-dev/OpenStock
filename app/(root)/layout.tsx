@@ -4,6 +4,9 @@ import AppShell from "@/components/shell/AppShell";
 import { searchStocks } from "@/lib/actions/finnhub.actions";
 import { getUserWatchlist } from "@/lib/actions/watchlist.actions";
 
+// Cold official catalog reads are bounded but may exceed the legacy 10-second limit.
+export const maxDuration = 60;
+
 const Layout = async ({ children }: { children: React.ReactNode }) => {
     const session = await getSession();
 

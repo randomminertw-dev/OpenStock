@@ -180,7 +180,7 @@ describe('Taiwan search and reads', () => {
         const response = await searchStocksWithStatus('2330');
         expect(JSON.parse(JSON.stringify(response))).toEqual({
             stocks: [],
-            error: '官方台股資料尚未初始化或暫時無法讀取，請稍後再試。',
+            error: '官方台股商品清單尚未初始化，請先完成資料同步。',
         });
     });
 
@@ -192,7 +192,7 @@ describe('Taiwan search and reads', () => {
         });
         const { searchStocksWithStatus } = await import('./finnhub.actions');
         const response = await searchStocksWithStatus('0050');
-        expect(response.error).toBe('官方台股資料尚未初始化或暫時無法讀取，請稍後再試。');
+        expect(response.error).toBe('官方台股資料暫時無法讀取，請稍後再試。');
         expect(JSON.stringify(response)).not.toContain('private-host');
     });
 

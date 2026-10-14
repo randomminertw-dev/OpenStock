@@ -16,6 +16,16 @@ vi.mock('@/database/mongoose', () => ({
 }));
 
 describe('TaiwanRepository (In-Memory)', () => {
+    it('preserves automatic history period identities through the real Mongo schema', () => {
+        const doc = new TaiwanSyncModel({ jobKey: 'history:TPEX:6488', historyStatus: {
+            state: 'partial', completed: 2, total: 570, candleCount: 2, reason: null,
+            completedPeriods: ['2026-10-13', '2026-10-12'], asof: '2026-10-13', checkedAt: '2026-10-14T03:00:00Z',
+        } });
+        expect(doc.toObject().historyStatus).toMatchObject({
+            completedPeriods: ['2026-10-13', '2026-10-12'], asof: '2026-10-13', checkedAt: '2026-10-14T03:00:00Z',
+        });
+    });
+
     it('writes and reads bars, upserting duplicate day to a single corrected record', async () => {
         const repo = createInMemoryTaiwanRepository();
         const initialBar: TaiwanBar = {

@@ -396,7 +396,7 @@ describe('Taiwan native components and stock page', () => {
             expect(shouldRefreshOnHistoryTransition('running', 'ready')).toBe(true);
             expect(shouldRefreshOnHistoryTransition('queued', 'ready')).toBe(true);
             expect(shouldRefreshOnHistoryTransition('disabled', 'ready')).toBe(false);
-            expect(shouldRefreshOnHistoryTransition('partial', 'ready')).toBe(false);
+            expect(shouldRefreshOnHistoryTransition('partial', 'ready')).toBe(true);
             expect(shouldRefreshOnHistoryTransition('ready', 'ready')).toBe(false);
             expect(shouldRefreshOnHistoryTransition('running', 'running')).toBe(false);
             expect(shouldRefreshOnHistoryTransition('queued', 'running')).toBe(false);

@@ -1,6 +1,6 @@
 import { CandleRequestError, createCandleCache, failure } from '../candles/shared';
 import type { CandleResult, CandleSource, RawCandles } from '../candles/types';
-import { getTaiwanRepository, getTaiwanSecurity, getTaiwanTestRepository } from './reads';
+import { getTaiwanRepository, getTaiwanSecurity, getTaiwanTestRepository, getTaiwanHistory } from './reads';
 import { parseTaiwanKey, TAIWAN_CODE_REGEX } from './symbols';
 import type { TaiwanBar, TaiwanKey, TaiwanRepository } from './types';
 
@@ -43,7 +43,7 @@ export async function officialTaiwanCandles(
     let key: TaiwanKey | null = parseTaiwanKey(trimmed);
     if (!key) {
         try {
-            const sec = await getTaiwanSecurity(trimmed, repo);
+            const sec = await getTaiwanSecurity(trimmed, injectedRepo);
             if (sec) {
                 key = { exchange: sec.exchange, code: sec.code };
             }
@@ -87,14 +87,21 @@ export async function officialTaiwanCandles(
         priceBasis: 'unadjusted',
     };
 
-    const cacheKey = `official:${key.exchange}:${key.code}:${days}`;
+    const automaticHistory = !injectedRepo && !getTaiwanTestRepository()
+        ? await getTaiwanHistory(`${key.exchange}:${key.code}`, days)
+        : null;
+    // A progressive backfill must invalidate assessments when more bars arrive.
+    const revision = automaticHistory
+        ? `${automaticHistory.status.completed}:${automaticHistory.bars.length}:${automaticHistory.bars.at(-1)?.fetchedAt}`
+        : '';
+    const cacheKey = `official:${key.exchange}:${key.code}:${days}:${revision}`;
 
     const loadCandles = async (): Promise<RawCandles> => {
         const taipeiNow = Date.now() + 8 * 3600_000;
         const through = new Date(taipeiNow).toISOString().slice(0, 10);
         const from = new Date(taipeiNow - days * DAY).toISOString().slice(0, 10);
 
-        const bars = await repo.readBars(key!, from, through);
+        const bars = automaticHistory?.bars ?? await repo.readBars(key!, from, through);
         const validMap = new Map<number, { t: number; o: number; h: number; l: number; c: number; v: number; volumeComplete: boolean }>();
 
         for (const b of bars) {
@@ -105,7 +112,7 @@ export async function officialTaiwanCandles(
         }
 
         if (validMap.size === 0) {
-            const status = await repo.readHistoryStatus(key!);
+            const status = automaticHistory?.status ?? await repo.readHistoryStatus(key!);
             if (status.state === 'disabled' || status.reason === 'missing-config') {
                 throw new CandleRequestError('missing-config');
             }

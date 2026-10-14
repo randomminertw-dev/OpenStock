@@ -16,6 +16,9 @@ const TaiwanSyncSchema = new Schema<ITaiwanSync>(
         owner: { type: String, default: null },
         lockedUntil: { type: Date, default: null },
         historyStatus: {
+            completedPeriods: { type: [String], default: undefined },
+            asof: { type: String, default: undefined },
+            checkedAt: { type: String, default: undefined },
             state: {
                 type: String,
                 enum: ['disabled', 'queued', 'running', 'partial', 'ready', 'error'],

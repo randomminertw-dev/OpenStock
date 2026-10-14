@@ -222,13 +222,13 @@ TAIWAN_CANDLE_PROVIDER=official
 TAIWAN_AUTO_SYNC_ENABLED=false
 TAIWAN_HISTORY_ENABLED=false
 
-# Bounded sync budgets (all must be explicit positive integers; background sync disabled if missing)
+# Optional on-demand budget overrides (set all six together); scheduled/CLI sync requires explicit limits
 TAIWAN_MAX_REQUESTS_PER_DAY=200
-TAIWAN_MAX_JOBS_PER_DAY=50
+TAIWAN_MAX_JOBS_PER_DAY=100
 TAIWAN_MAX_TRANSFER_BYTES_PER_DAY=104857600
-TAIWAN_MAX_STORAGE_BYTES=1073741824
-TAIWAN_MAX_TRACKED_SECURITIES=200
-TAIWAN_MAX_RESPONSE_BYTES=15728640
+TAIWAN_MAX_STORAGE_BYTES=10485760
+TAIWAN_MAX_TRACKED_SECURITIES=20
+TAIWAN_MAX_RESPONSE_BYTES=10485760
 
 # FinMind (legacy fallback; Taiwan daily history when TAIWAN_CANDLE_PROVIDER=finmind; sent server-side only)
 # Optional: FINMIND_API_TOKEN=your_finmind_token
@@ -327,7 +327,7 @@ public/assets/images/   # logos and screenshots
         - TPEX: `tpex-mainboard-daily-close-quotes` (daily close snapshot), `dailyQuotes` (full-market daily OHLCV batch), `mopsfin_t187ap03_O` / ETF filter (OTC stock & ETF catalog), `tpex_mainboard_peratio_analysis` (PE/PB/yield), `tpex_exright_prepost` (ex-rights).
     - Exact shares volume: Volume represents exact trading shares (`成交股數`), not lots (張) multiplied by 1,000.
     - Price basis & freshness: Unadjusted prices in the Asia/Taipei timezone. OpenAPI snapshots are flagged `complete: false`; verified after-trading historical bars are flagged `complete: true`. No synthetic bars are fabricated for halted or non-trading days.
-    - Zero-cost architecture & Free sync quotas: Public endpoints with zero API fees. Network requests, transfer bytes, jobs, and storage are strictly bounded by atomic daily budgets in MongoDB. Background sync is disabled by default (`TAIWAN_AUTO_SYNC_ENABLED=false`, `TAIWAN_HISTORY_ENABLED=false`) until explicitly configured.
+    - Zero-cost architecture & Free sync quotas: Public endpoints with zero API fees. Network requests, transfer bytes, jobs, and storage are strictly bounded by atomic daily budgets in MongoDB. On-demand reads work automatically with conservative default limits; optional background jobs remain disabled by default (`TAIWAN_AUTO_SYNC_ENABLED=false`, `TAIWAN_HISTORY_ENABLED=false`).
     - Rollback flag: `TAIWAN_CANDLE_PROVIDER=official|finmind` (default: `official`). When set to `finmind`, daily candles and technical indicators fall back to the FinMind provider.
     - TradingView intraday scope: The TradingView embeddable widgets provide intraday chart and quote views (subject to TradingView's available data feeds); the native SVG charts, 57 technical indicators, and four-factor scores use official EOD daily bars stored in MongoDB.
 
@@ -381,25 +381,23 @@ Package scripts
   - Scoped synchronization: `npm run taiwan:sync -- --apply --target production --symbols TWSE:2330,TWSE:0050 --days 800`
   - Supported flags: `--dry-run`, `--apply`, `--target <label>`, `--symbols <list>`, `--days <1-1000>`, `--close`, `--catalog`, `--details`, `--history`
 
-### Taiwan data initialization
+### Automatic Taiwan data loading
 
-The Taiwan pages read the official catalog and daily history from MongoDB. A deployment alone does not populate these collections, and background synchronization is disabled by default. Finnhub results for an English query such as `taiwan` do not confirm that the official catalog is ready.
+Deploy with the website's existing MongoDB configuration. Searching `2330` or `0050` automatically retrieves and caches the official stock/ETF catalog when it is missing; there is no required `--catalog` initialization or extra API key. Opening a Taiwan stock page automatically loads recent confirmed daily bars and applicable stock/fund information. Optional background sync flags can remain false.
 
-The CLI loads the same env files as Next.js before starting its database worker; explicitly supplied environment variables take precedence. Confirm that `MONGODB_URI` points to the database used by the website and that the bounded sync budgets fit the existing free allowances. `--target` is a label, **not** a database selector; `--target local` uses a temporary in-memory repository and does not initialize the website's MongoDB.
+The catalog cache lasts 24 hours. Shared requests and Next.js data caching reduce repeated upstream downloads, and MongoDB stores the results for later instances. Failed updates preserve usable cached data. If the shared quota ledger cannot be read, new upstream work pauses instead of allocating a separate per-instance allowance.
 
-First inspect the intended work without network requests or database writes:
+Long history progresses two official periods per request. The page polls while visible and refreshes charts/indicators as more bars arrive. Listed history uses monthly periods; OTC history uses daily batches to preserve exact shares and the same trading scope. Progress is stored by period identity so day/month boundaries and serverless restarts do not lose work. Completed history refreshes only recent periods, rather than downloading the whole range again. Current-day bars are conservatively excluded before 18:00 Taipei time; the displayed date always identifies the available completed session.
+
+Default on-demand limits are 200 requests/day, 100 MiB transfer/day, 10 MiB persisted payload/day, 10 MiB per response, and up to 20 cached security histories per instance. Explicit `TAIWAN_MAX_*` overrides replace these defaults when all six are valid positive integers. OTC long history can require several days under these limits: existing data remains usable, and a visible page resumes after the next Taipei day when the quota resets. No paid provider or infrastructure upgrade is added.
+
+The CLI remains an optional prewarming/maintenance tool. It loads Next.js env files before starting its worker; `--target` is a label, not a database selector, and `--target local` is nonpersistent. Preview work without requests or writes:
 
 ```bash
 npm run taiwan:sync -- --dry-run --catalog --close --details --history --symbols TWSE:2330 --days 800
 ```
 
-After confirming the database target and free quotas, initialize the catalog and the scoped analysis data:
-
-```bash
-npm run taiwan:sync -- --apply --target website --catalog --close --details --history --symbols TWSE:2330 --days 800
-```
-
-`--symbols` scopes history and details; catalog/close synchronization uses whole-market endpoints. The request and storage budgets still apply, so history may need another run. The default command with only `--symbols` loads history, **not** the catalog. An empty or unreadable catalog now returns a readable search status, rather than throwing an error whose message Next.js hides in production. No synchronization or deployment is performed automatically by these instructions.
+Only use `--apply` for intentional maintenance after confirming the database target and explicit limits. Normal users do not need to run it. Signed-in access is required for on-demand actions that can trigger upstream work. Source failures return readable status data instead of production-redacted Server Action exceptions.
 
 Developer experience
 - TypeScript strict mode

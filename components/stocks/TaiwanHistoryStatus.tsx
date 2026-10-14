@@ -15,7 +15,7 @@ export function shouldRefreshOnHistoryTransition(
     prevState: TaiwanHistoryStatusData['state'],
     nextState: TaiwanHistoryStatusData['state']
 ): boolean {
-    const wasActive = prevState === 'running' || prevState === 'queued';
+    const wasActive = prevState === 'running' || prevState === 'queued' || prevState === 'partial';
     return wasActive && nextState === 'ready';
 }
 
@@ -34,13 +34,17 @@ export default function TaiwanHistoryStatus({
     const [isRetrying, setIsRetrying] = useState(false);
     const pollCountRef = useRef(0);
     const prevStatusStateRef = useRef(initial.state);
+    const prevCandleCountRef = useRef(initial.candleCount);
+    useEffect(() => { setStatus(initial); }, [initial]);
 
     useEffect(() => {
-        if (shouldRefreshOnHistoryTransition(prevStatusStateRef.current, status.state)) {
+        if (shouldRefreshOnHistoryTransition(prevStatusStateRef.current, status.state)
+            || status.candleCount > prevCandleCountRef.current) {
             router?.refresh();
         }
         prevStatusStateRef.current = status.state;
-    }, [status.state, router]);
+        prevCandleCountRef.current = status.candleCount;
+    }, [status.state, status.candleCount, router]);
 
     const handleRetry = async () => {
         setIsRetrying(true);
@@ -56,8 +60,8 @@ export default function TaiwanHistoryStatus({
     };
 
     useEffect(() => {
-        // Only poll when actively running or queued
-        if (status.state !== 'running' && status.state !== 'queued') {
+        // On-demand partial history also progresses without an external job service.
+        if ((status.state !== 'running' && status.state !== 'queued' && status.state !== 'partial') || status.reason) {
             return;
         }
 
@@ -65,13 +69,13 @@ export default function TaiwanHistoryStatus({
             if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
                 return;
             }
-            if (pollCountRef.current >= 20) {
+            if (pollCountRef.current >= Math.ceil(status.total / 2) + 3) {
                 return;
             }
 
             pollCountRef.current += 1;
             try {
-                const res = await getTaiwanHistory(symbol);
+                const res = await getTaiwanHistory(symbol, 800);
                 if (res?.status) {
                     setStatus(res.status);
                 }
@@ -82,7 +86,22 @@ export default function TaiwanHistoryStatus({
 
         const interval = setInterval(poll, 30_000);
         return () => clearInterval(interval);
-    }, [symbol, status.state]);
+    }, [symbol, status.state, status.reason, status.total]);
+
+    useEffect(() => {
+        if (status.reason !== 'budget-limit') return;
+        const taipeiDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+        const pausedDay = taipeiDay();
+        let pending = false;
+        const interval = setInterval(async () => {
+            if (pending || taipeiDay() === pausedDay || document.visibilityState !== 'visible') return;
+            pending = true;
+            try { const result = await getTaiwanHistory(symbol, 800); setStatus(result.status); pollCountRef.current = 0; }
+            catch { /* Keep already loaded data while the next day's budget becomes available. */ }
+            finally { pending = false; }
+        }, 60_000);
+        return () => clearInterval(interval);
+    }, [symbol, status.reason]);
 
     if (status.state === 'ready') {
         return null;
@@ -103,7 +122,8 @@ export default function TaiwanHistoryStatus({
                 <div className="flex items-center gap-2">
                     <Database className="size-4 text-brand shrink-0" />
                     <span>
-                        部分歷史資料（已載入 <b className="text-foreground">{status.candleCount}</b> 根 K 線，進度 {status.completed} / {status.total} 個月份）
+                        部分歷史資料（已載入 <b className="text-foreground">{status.candleCount}</b> 根 K 線，進度 {status.completed} / {status.total} 批次）
+                        {status.reason === 'budget-limit' ? ' · 今日額度已達上限，明日自動續載' : status.reason === 'api-error' ? ' · 官方來源暫時無法更新' : ' · 自動載入中'}
                     </span>
                 </div>
                 <button

@@ -1,5 +1,7 @@
 'use server';
 
+import { getSession, requireUserId } from '@/lib/better-auth/auth';
+
 import {
     getTaiwanSecurity as readSecurity,
     getTaiwanQuote as readQuote,
@@ -18,23 +20,32 @@ import type {
     TaiwanSecurity,
 } from '@/lib/taiwan/types';
 
+async function requireReadAccess(): Promise<void> {
+    await requireUserId();
+}
+
 export async function getTaiwanSecurity(symbol: string): Promise<TaiwanSecurity | null> {
+    await requireReadAccess();
     return await readSecurity(symbol);
 }
 
 export async function getTaiwanQuote(symbol: string): Promise<TaiwanQuote | null> {
+    await requireReadAccess();
     return await readQuote(symbol);
 }
 
 export async function searchTaiwanSecurities(query: string): Promise<StockWithWatchlistStatus[]> {
+    await requireReadAccess();
     return await readSearch(query);
 }
 
 export async function getTaiwanHistory(symbol: string, days = 120): Promise<TaiwanHistory> {
+    await requireReadAccess();
     return await readHistory(symbol, days);
 }
 
 export async function getTaiwanDetails(symbol: string): Promise<TaiwanDetails | null> {
+    await requireReadAccess();
     return await readDetails(symbol);
 }
 
@@ -48,7 +59,6 @@ export async function getTaiwanPageData(symbol: string): Promise<{
     const repo = getTaiwanRepository();
     let session = null;
     try {
-        const { getSession } = await import('@/lib/better-auth/auth');
         session = await getSession();
     } catch {
         session = null;
@@ -64,11 +74,12 @@ export async function getTaiwanPageData(symbol: string): Promise<{
         }
     }
 
+    const readOnlyRepo = session?.user ? undefined : repo;
     const [security, quote, history, details] = await Promise.all([
-        readSecurity(symbol, repo),
-        readQuote(symbol, repo),
-        readHistory(symbol, 800, repo),
-        readDetails(symbol, repo),
+        readSecurity(symbol, readOnlyRepo),
+        readQuote(symbol, readOnlyRepo),
+        readHistory(symbol, 800, readOnlyRepo),
+        readDetails(symbol, readOnlyRepo),
     ]);
 
     if (session?.user) {
@@ -104,8 +115,10 @@ export async function requestTaiwanHistoryAction(
     symbol: string,
     days = 800
 ): Promise<TaiwanHistoryStatus> {
-    const { requireUserId } = await import('@/lib/better-auth/auth');
     await requireUserId();
+    if (process.env.TAIWAN_HISTORY_ENABLED !== 'true') {
+        return (await readHistory(symbol, days)).status;
+    }
     const repo = getTaiwanRepository();
     const sec = await readSecurity(symbol, repo);
     const key = parseTaiwanKey(symbol) ?? (sec ? { exchange: sec.exchange, code: sec.code } : null);

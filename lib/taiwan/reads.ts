@@ -1,6 +1,7 @@
 import { parseTaiwanKey, taiwanAliases } from './symbols';
 import { searchTaiwanCatalog } from './catalog';
 import { createMongoTaiwanRepository } from './repository';
+import { getTaiwanOnDemand } from './on-demand';
 import {
     type TaiwanDetails,
     type TaiwanHistory,
@@ -11,6 +12,15 @@ import {
 } from './types';
 
 let testRepository: TaiwanRepository | null = null;
+let defaultRepository: TaiwanRepository | null = null;
+
+/** Expected catalog readiness failures, without exposing connection details. */
+export class TaiwanCatalogError extends Error {
+    constructor(public readonly code: 'catalog-empty' | 'catalog-unavailable') {
+        super('台股資料庫準備中或同步未啟用');
+        this.name = 'TaiwanCatalogError';
+    }
+}
 
 /**
  * Injects a TaiwanRepository for unit tests and local mocking.
@@ -24,7 +34,12 @@ export function getTaiwanTestRepository(): TaiwanRepository | null {
 }
 
 export function getTaiwanRepository(injected?: TaiwanRepository): TaiwanRepository {
-    return injected ?? testRepository ?? createMongoTaiwanRepository();
+    return injected ?? testRepository ?? (defaultRepository ??= createMongoTaiwanRepository());
+}
+
+function onDemand(repo: TaiwanRepository, injected?: TaiwanRepository) {
+    // Explicit repositories retain the deterministic read-only contract used by sync workers.
+    return !injected && !testRepository ? getTaiwanOnDemand(repo) : null;
 }
 
 function getRepo(injected?: TaiwanRepository): TaiwanRepository {
@@ -45,7 +60,7 @@ export async function getTaiwanSecurity(
     const repo = getRepo(injectedRepo);
     let catalog: TaiwanSecurity[] = [];
     try {
-        catalog = await repo.readCatalog();
+        catalog = await (onDemand(repo, injectedRepo)?.catalog() ?? repo.readCatalog());
     } catch {
         return null;
     }
@@ -84,7 +99,7 @@ export async function getTaiwanQuote(
     const repo = getRepo(injectedRepo);
     let sec: TaiwanSecurity | null = null;
     try {
-        sec = await getTaiwanSecurity(trimmed, repo);
+        sec = await getTaiwanSecurity(trimmed, injectedRepo);
     } catch {
         // Fall through to parse key directly
     }
@@ -95,7 +110,9 @@ export async function getTaiwanQuote(
 
     let bars = [];
     try {
-        bars = await repo.readBars(key);
+        bars = onDemand(repo, injectedRepo)
+            ? (await onDemand(repo, injectedRepo)!.history(key, 800)).bars
+            : await repo.readBars(key);
     } catch {
         return null;
     }
@@ -165,13 +182,13 @@ export async function searchTaiwanSecurities(
     const repo = getRepo(injectedRepo);
     let catalog: TaiwanSecurity[] = [];
     try {
-        catalog = await repo.readCatalog();
+        catalog = await (onDemand(repo, injectedRepo)?.catalog() ?? repo.readCatalog());
     } catch {
-        throw new Error('台股資料庫準備中或同步未啟用');
+        throw new TaiwanCatalogError('catalog-unavailable');
     }
 
     if (catalog.length === 0) {
-        throw new Error('台股資料庫準備中或同步未啟用');
+        throw new TaiwanCatalogError('catalog-empty');
     }
 
     const matched = searchTaiwanCatalog(catalog, trimmed, 15);
@@ -207,7 +224,7 @@ export async function getTaiwanHistory(
     const repo = getRepo(injectedRepo);
     let sec: TaiwanSecurity | null = null;
     try {
-        sec = await getTaiwanSecurity(symbol, repo);
+        sec = await getTaiwanSecurity(symbol, injectedRepo);
     } catch {
         // continue
     }
@@ -219,6 +236,8 @@ export async function getTaiwanHistory(
     }
 
     try {
+        const loader = onDemand(repo, injectedRepo);
+        if (loader) return await loader.history(key, days);
         const allBars = await repo.readBars(key);
         const bars = days > 0 ? allBars.slice(-days) : allBars;
         const status = await repo.readHistoryStatus(key);
@@ -249,7 +268,7 @@ export async function getTaiwanDetails(
     const repo = getRepo(injectedRepo);
     let sec: TaiwanSecurity | null = null;
     try {
-        sec = await getTaiwanSecurity(symbol, repo);
+        sec = await getTaiwanSecurity(symbol, injectedRepo);
     } catch {
         // continue
     }
@@ -259,6 +278,8 @@ export async function getTaiwanDetails(
     if (!key) return null;
 
     try {
+        const loader = onDemand(repo, injectedRepo);
+        if (loader && sec) return await loader.details(sec);
         const stored = await repo.readDetails(key);
         if (stored) return stored;
         if (sec) {

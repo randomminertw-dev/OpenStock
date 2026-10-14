@@ -44,6 +44,9 @@ export type TaiwanQuote = TaiwanKey & {
 };
 
 export type TaiwanHistoryStatus = {
+    completedPeriods?: string[];
+    asof?: string;
+    checkedAt?: string;
     state: 'disabled' | 'queued' | 'running' | 'partial' | 'ready' | 'error';
     completed: number;
     total: number;

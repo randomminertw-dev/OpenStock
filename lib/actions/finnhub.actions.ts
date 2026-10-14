@@ -8,7 +8,7 @@ import { hasFinnhubQuotes } from '@/lib/markets';
 import { getSession } from '@/lib/better-auth/auth';
 import { CandleRequestError, createCandleCache, failure, normalizeCandles } from '../candles/shared';
 import type { CandleResult, CandleSource } from '../candles/types';
-import { getTaiwanQuote, getTaiwanSecurity, searchTaiwanSecurities } from '@/lib/taiwan/reads';
+import { getTaiwanQuote, getTaiwanSecurity, searchTaiwanSecurities, TaiwanCatalogError } from '@/lib/taiwan/reads';
 import { parseTaiwanKey, TAIWAN_CODE_REGEX } from '@/lib/taiwan/symbols';
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
@@ -486,10 +486,19 @@ export async function searchStocksWithStatus(query?: string): Promise<{
 }> {
     try {
         return { stocks: await searchStocks(query), error: null };
-    } catch {
+    } catch (err) {
+        if (err instanceof TaiwanCatalogError) {
+            console.warn('[taiwan-search]', err.code);
+            return {
+                stocks: [],
+                error: err.code === 'catalog-empty'
+                    ? '官方台股商品清單尚未初始化，請先完成資料同步。'
+                    : '官方台股資料暫時無法讀取，請稍後再試。',
+            };
+        }
         return {
             stocks: [],
-            error: '官方台股資料尚未初始化或暫時無法讀取，請稍後再試。',
+            error: '搜尋暫時無法使用，請稍後再試。',
         };
     }
 }

@@ -1,6 +1,12 @@
 import React, { type ReactNode, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Root stock pages are authenticated; keep auth/database setup outside indicator tests.
+vi.mock('@/lib/better-auth/auth', () => ({
+    getSession: vi.fn().mockResolvedValue({ user: { id: 'indicator-test-user' } }),
+    requireUserId: vi.fn().mockResolvedValue('indicator-test-user'),
+}));
 import type { TaiwanBar, TaiwanSecurity } from '@/lib/taiwan/types';
 
 vi.mock('@/lib/actions/finnhub.actions', () => ({
