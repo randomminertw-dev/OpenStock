@@ -4,6 +4,8 @@ import { TaiwanBarModel } from '../../database/models/taiwan-bar.model';
 import { TaiwanDatasetModel } from '../../database/models/taiwan-dataset.model';
 import { TaiwanSyncModel } from '../../database/models/taiwan-sync.model';
 import { TaiwanUsageModel } from '../../database/models/taiwan-usage.model';
+import { searchTaiwanCatalog } from './catalog';
+import { parseTaiwanKey } from './symbols';
 import {
     TaiwanSourceError,
     type TaiwanBar,
@@ -36,8 +38,9 @@ export function createInMemoryTaiwanRepository(): TaiwanRepository {
             : `${b.exchange}:${b.code}:${date}:${basis}`;
 
     return {
-        async readCatalog(): Promise<TaiwanSecurity[]> {
-            return Array.from(catalog.values());
+        async readCatalog(query?: string): Promise<TaiwanSecurity[]> {
+            const items = Array.from(catalog.values());
+            return query?.trim() ? searchTaiwanCatalog(items, query, items.length) : items;
         },
 
         async readBars(key: TaiwanKey, from?: string, through?: string): Promise<TaiwanBar[]> {
@@ -201,9 +204,19 @@ export function createMongoTaiwanRepository(): TaiwanRepository {
     }
 
     return {
-        async readCatalog(): Promise<TaiwanSecurity[]> {
+        async readCatalog(query?: string): Promise<TaiwanSecurity[]> {
             await ensureDb();
-            const docs = await TaiwanSecurityModel.find({}).lean();
+            let filter: Record<string, unknown> = {};
+            const trimmed = query?.trim();
+            if (trimmed) {
+                const key = parseTaiwanKey(trimmed);
+                if (key) filter = { exchange: key.exchange, code: key.code };
+                else {
+                    const literal = new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+                    filter = { $or: [{ code: literal }, { name: literal }, { 'metadata.fullName': literal }] };
+                }
+            }
+            const docs = await TaiwanSecurityModel.find(filter).lean();
             return docs.map(doc => ({
                 exchange: doc.exchange,
                 code: doc.code,

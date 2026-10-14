@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import { buildTaiwanCatalog } from './catalog';
 import { createInMemoryTaiwanRepository } from './repository';
 import { createTaiwanOnDemand } from './on-demand';
 import type { TaiwanRequester } from './types';
+import { TaiwanSourceError } from './types';
 
 const companies = [{ '公司代號': '2330', '公司簡稱': '台積電', '公司名稱': '台灣積體電路製造股份有限公司', '普通股每股面額': '新台幣10元', '出表日期': '1151014' }];
 const etfs = [{ '基金代號': '0050', '基金簡稱': '元大台灣50', '出表日期': '1151014' }];
@@ -23,6 +25,38 @@ function upstream() {
 }
 
 describe('automatic official Taiwan loading', () => {
+    it('searches persisted codes on new instances without upstream quota or a full catalog scan', async () => {
+        const base = createInMemoryTaiwanRepository();
+        await base.writeCatalog(buildTaiwanCatalog({ 'twse-companies': companies, 'twse-etfs': etfs }));
+        const repo = { ...base, readCatalog: async (query?: string) => {
+            if (!query) throw new Error('full catalog unavailable');
+            return (await base.readCatalog()).filter(s => s.code === query);
+        } };
+        const request = vi.fn<TaiwanRequester>(async () => { throw new TaiwanSourceError('budget-limit'); });
+        const first = createTaiwanOnDemand({ repo, request });
+        expect((await first.catalog('2330'))[0]?.code).toBe('2330');
+        const next = createTaiwanOnDemand({ repo, request });
+        expect((await next.catalog('0050'))[0]?.code).toBe('0050');
+        expect(request).not.toHaveBeenCalled();
+    });
+
+    it('preserves the budget failure when no persisted instrument can satisfy a search', async () => {
+        const load = createTaiwanOnDemand({ repo: createInMemoryTaiwanRepository(),
+            request: async () => { throw new TaiwanSourceError('budget-limit'); } });
+        await expect(load.catalog('2330')).rejects.toMatchObject({ reason: 'budget-limit' });
+    });
+
+    it('keeps a targeted catalog query usable after a full-catalog read has failed', async () => {
+        const base = createInMemoryTaiwanRepository();
+        await base.writeCatalog(buildTaiwanCatalog({ 'twse-companies': companies }));
+        const repo = { ...base, readCatalog: async (query?: string) => {
+            if (!query) throw new Error('full catalog failed');
+            return base.readCatalog(query);
+        } };
+        const load = createTaiwanOnDemand({ repo, request: async () => { throw new TaiwanSourceError('budget-limit'); } });
+        await expect(load.catalog()).rejects.toThrow();
+        expect((await load.catalog('2330'))[0]?.code).toBe('2330');
+    });
     it('bootstraps stocks and ETFs on first use with background synchronization disabled', async () => {
         const repo = createInMemoryTaiwanRepository();
         const load = createTaiwanOnDemand({ repo, request: upstream() });

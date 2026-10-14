@@ -3,6 +3,7 @@ import { searchTaiwanCatalog } from './catalog';
 import { createMongoTaiwanRepository } from './repository';
 import { getTaiwanOnDemand } from './on-demand';
 import {
+    TaiwanSourceError,
     type TaiwanDetails,
     type TaiwanHistory,
     type TaiwanKey,
@@ -16,7 +17,7 @@ let defaultRepository: TaiwanRepository | null = null;
 
 /** Expected catalog readiness failures, without exposing connection details. */
 export class TaiwanCatalogError extends Error {
-    constructor(public readonly code: 'catalog-empty' | 'catalog-unavailable') {
+    constructor(public readonly code: 'catalog-empty' | 'catalog-unavailable' | 'catalog-budget-limit') {
         super('台股資料庫準備中或同步未啟用');
         this.name = 'TaiwanCatalogError';
     }
@@ -60,7 +61,7 @@ export async function getTaiwanSecurity(
     const repo = getRepo(injectedRepo);
     let catalog: TaiwanSecurity[] = [];
     try {
-        catalog = await (onDemand(repo, injectedRepo)?.catalog() ?? repo.readCatalog());
+        catalog = await (onDemand(repo, injectedRepo)?.catalog(trimmed) ?? repo.readCatalog());
     } catch {
         return null;
     }
@@ -182,9 +183,10 @@ export async function searchTaiwanSecurities(
     const repo = getRepo(injectedRepo);
     let catalog: TaiwanSecurity[] = [];
     try {
-        catalog = await (onDemand(repo, injectedRepo)?.catalog() ?? repo.readCatalog());
-    } catch {
-        throw new TaiwanCatalogError('catalog-unavailable');
+        catalog = await (onDemand(repo, injectedRepo)?.catalog(trimmed) ?? repo.readCatalog());
+    } catch (error) {
+        throw new TaiwanCatalogError(error instanceof TaiwanSourceError && error.reason === 'budget-limit'
+            ? 'catalog-budget-limit' : 'catalog-unavailable');
     }
 
     if (catalog.length === 0) {

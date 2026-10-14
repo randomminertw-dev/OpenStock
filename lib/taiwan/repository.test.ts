@@ -363,6 +363,35 @@ describe('TaiwanRepository (In-Memory)', () => {
 });
 
 describe('Mongoose Taiwan Models & Repository Config', () => {
+    it('filters persisted catalog lookups by exchange/code and treats search punctuation literally', async () => {
+        const originalUri = process.env.MONGODB_URI;
+        process.env.MONGODB_URI = 'mongodb://localhost:27017/test';
+        const filters: unknown[] = [];
+        const find = vi.spyOn(TaiwanSecurityModel, 'find').mockImplementation(((filter: unknown) => {
+            filters.push(filter);
+            return { lean: async () => [] };
+        }) as never);
+        try {
+            const repo = createMongoTaiwanRepository();
+            await repo.readCatalog('2330.TW');
+            expect(filters.at(-1)).toEqual({ exchange: 'TWSE', code: '2330' });
+            await repo.readCatalog('6488.TWO');
+            expect(filters.at(-1)).toEqual({ exchange: 'TPEX', code: '6488' });
+            await repo.readCatalog('0050');
+            const codeQuery = filters.at(-1) as { $or: { code?: RegExp }[] };
+            expect(codeQuery.$or[0].code?.test('0050')).toBe(true);
+            expect(codeQuery.$or[0].code?.test('50')).toBe(false);
+            await repo.readCatalog('.*');
+            const literalQuery = filters.at(-1) as { $or: { code?: RegExp }[] };
+            expect(literalQuery.$or[0].code?.test('2330')).toBe(false);
+            expect(literalQuery.$or[0].code?.test('.*')).toBe(true);
+        } finally {
+            find.mockRestore();
+            if (originalUri === undefined) delete process.env.MONGODB_URI;
+            else process.env.MONGODB_URI = originalUri;
+        }
+    });
+
     it('throws missing-config when MONGODB_URI is absent', async () => {
         const originalUri = process.env.MONGODB_URI;
         delete process.env.MONGODB_URI;

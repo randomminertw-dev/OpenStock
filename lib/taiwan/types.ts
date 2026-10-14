@@ -133,7 +133,8 @@ export type TaiwanSyncConfig = {
 };
 
 export interface TaiwanRepository {
-    readCatalog(): Promise<TaiwanSecurity[]>;
+    /** A query returns matching persisted instruments without downloading the full catalog. */
+    readCatalog(query?: string): Promise<TaiwanSecurity[]>;
     readBars(key: TaiwanKey, from?: string, through?: string): Promise<TaiwanBar[]>;
     readDetails(key: TaiwanKey): Promise<TaiwanDetails | null>;
     writeCatalog(items: TaiwanSecurity[]): Promise<void>;

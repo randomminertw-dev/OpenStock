@@ -491,7 +491,9 @@ export async function searchStocksWithStatus(query?: string): Promise<{
             console.warn('[taiwan-search]', err.code);
             return {
                 stocks: [],
-                error: err.code === 'catalog-empty'
+                error: err.code === 'catalog-budget-limit'
+                    ? '今日台股資料更新額度已達上限，尚未快取的商品暫時無法搜尋，請明日再試。'
+                    : err.code === 'catalog-empty'
                     ? '官方台股商品清單尚未初始化，請先完成資料同步。'
                     : '官方台股資料暫時無法讀取，請稍後再試。',
             };

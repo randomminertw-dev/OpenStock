@@ -42,6 +42,32 @@ beforeEach(async () => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe('production entrypoints without manual initialization', () => {
+    it('searches persisted stocks and ETFs after history quota exhaustion on a new instance', async () => {
+        const original = await import('@/lib/actions/finnhub.actions');
+        expect((await original.searchStocksWithStatus('2330')).error).toBeNull();
+        const repo = state.repository();
+        const read = repo.readCatalog.bind(repo);
+        repo.readCatalog = async (query?: string) => {
+            if (!query) throw new Error('Full catalog download unavailable');
+            return read(query);
+        };
+        repo.reserveUsage = async () => false;
+        vi.resetModules();
+        officialFetch.mockClear();
+        const fresh = await import('@/lib/actions/finnhub.actions');
+        expect((await fresh.searchStocksWithStatus('2330')).stocks[0]?.symbol).toBe('TWSE:2330');
+        expect((await fresh.searchStocksWithStatus('0050')).stocks[0]?.symbol).toBe('TWSE:0050');
+        expect(officialFetch).not.toHaveBeenCalled();
+    });
+
+    it('reports the daily budget limit for an uncached search instead of a generic catalog failure', async () => {
+        state.repository().reserveUsage = async () => false;
+        const { searchStocksWithStatus } = await import('@/lib/actions/finnhub.actions');
+        const result = await searchStocksWithStatus('2330');
+        expect(result.stocks).toEqual([]);
+        expect(result.error).toContain('額度');
+        expect(officialFetch).not.toHaveBeenCalled();
+    });
     it('searches 2330 and 0050 in an empty database without Finnhub or background flags', async () => {
         const { searchStocksWithStatus } = await import('@/lib/actions/finnhub.actions');
         const stock = await searchStocksWithStatus('2330');

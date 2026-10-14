@@ -1,4 +1,4 @@
-import { buildTaiwanCatalog } from './catalog';
+import { buildTaiwanCatalog, searchTaiwanCatalog } from './catalog';
 import { buildTaiwanDetails } from './fundamentals';
 import { createBudgetedRequest, getTaipeiDayString } from './budget';
 import { loadTaiwanSyncConfig } from './config';
@@ -53,7 +53,9 @@ function optionalPersistence(repository: TaiwanRepository): TaiwanRepository {
             const operation = Reflect.get(target, property);
             if (typeof operation !== 'function') return operation;
             return async (...args: unknown[]) => {
-                const failure = failures.get(property);
+                // A large full-market read and a small filtered query have separate failure scopes.
+                const scope = property === 'readCatalog' && args[0] ? 'readCatalog:query' : property;
+                const failure = failures.get(scope);
                 if (failure && failure.until > Date.now()) {
                     console.warn('[taiwan-data]', { event: 'cache-blocked', operation: String(property),
                         reason: failure.reason, cause: failure.cause, code: failure.code,
@@ -68,7 +70,7 @@ function optionalPersistence(repository: TaiwanRepository): TaiwanRepository {
                         Reflect.apply(operation, target, args),
                         new Promise<never>((_, reject) => { timer = setTimeout(() => { timedOut = true; reject(new Error('Cache timeout')); }, 1500); }),
                     ]);
-                    failures.delete(property);
+                    failures.delete(scope);
                     return value;
                 } catch (error) {
                     const rawCode = (error as { code?: unknown } | null)?.code;
@@ -77,7 +79,7 @@ function optionalPersistence(repository: TaiwanRepository): TaiwanRepository {
                     const cause = timedOut ? 'cache-timeout' : error instanceof TaiwanSourceError ? error.reason : 'operation-failed';
                     // Cache reads and writes cannot disable a healthy shared quota ledger.
                     // A failed quota operation still blocks new upstream work.
-                    failures.set(property, { until: Date.now() + 60_000, reason, cause, code });
+                    failures.set(scope, { until: Date.now() + 60_000, reason, cause, code });
                     // Never print MongoDB messages, connection strings, or environment values.
                     console.warn('[taiwan-data]', { event: 'cache-failure', operation: String(property),
                         reason: cause, code, elapsedMs: Date.now() - started });
@@ -152,8 +154,17 @@ export function createTaiwanOnDemand({ repo: repository, request: suppliedReques
         } catch { /* Successfully fetched data remains usable without persistence. */ }
     }
 
-    async function catalog(): Promise<TaiwanSecurity[]> {
-        if (catalogCache.length && catalogUntil > now().getTime()) return catalogCache;
+    async function catalog(query?: string): Promise<TaiwanSecurity[]> {
+        const cached = catalogCache.length && catalogUntil > now().getTime();
+        if (cached && (!query || searchTaiwanCatalog(catalogCache, query).length)) return catalogCache;
+        // Searching known instruments is a database read, independent of history/upstream budgets.
+        // Do not cache this subset as the whole market catalog on a new serverless instance.
+        if (query) {
+            const stored = await repo.readCatalog(query).catch(() => []);
+            const matched = searchTaiwanCatalog(stored, query);
+            if (matched.length) return matched;
+        }
+        if (cached) return catalogCache;
         if (catalogPending) return catalogPending;
         catalogPending = (async () => {
             const stored = await repo.readCatalog().catch(() => []);
@@ -174,6 +185,9 @@ export function createTaiwanOnDemand({ repo: repository, request: suppliedReques
                     catalogUntil = now().getTime() + 60_000;
                     return previous;
                 }
+                const budgetFailure = settled.find(result => result.status === 'rejected'
+                    && result.reason instanceof TaiwanSourceError && result.reason.reason === 'budget-limit');
+                if (budgetFailure?.status === 'rejected') throw budgetFailure.reason;
                 throw new TaiwanSourceError('api-error', 'Official catalog unavailable');
             }
             // A failed market dataset must not remove existing instruments from the other markets.
