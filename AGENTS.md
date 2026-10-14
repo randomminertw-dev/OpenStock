@@ -53,3 +53,4 @@ Vitest 使用 Node 環境；測試檔命名為 `*.test.ts`，放在模組旁或 
 - 2026-10-14：台股索引未初始化／讀取失敗不能用 thrown Server Action 傳使用者訊息（production 會遮蔽）；搜尋改用結構化結果，無報價頁面不宣稱有收盤。CLI 在 fork 前載入 Next env；初始化須含 --catalog，--target 僅標籤、local 為非持久測試資料庫。
 - 2026-10-14：搜尋須區分 catalog-empty（需初始化商品清單）與 catalog-unavailable（資料庫讀取失敗）；Vercel 日誌使用 [taiwan-search] 安全代碼，不輸出連線字串；修改提示並不等於已完成實際資料初始化。
 - 2026-10-14：依核准方案取消手動初始化前提：登入後搜尋／頁面按需載入官方名錄、收盤價與歷史，背景旗標可維持 false；沿用 Vercel MongoDB 與共享每日額度，不需本機憑證。歷史以 completedPeriods/asof/checkedAt 記錄且須列入 Mongoose schema，資料寫入成功後才保存完成進度；跨日刷新近期批次，額度耗盡隔日續載。
+- 2026-10-14：正式站登入實測：2330／0050／6488 搜尋失敗、AAPL 正常，歷史重試回傳 missing-config、0/27 批次；本機官方名錄與 2330 歷史 HTTP 200。部分 TAIWAN_MAX_* 設定與 MongoDB 1.5 秒保護都可產生相同症狀，不能逕認官方限流；新增 [taiwan-data] 安全診斷，正式站唯一原因仍待 Vercel 設定／日誌確認。

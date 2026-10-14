@@ -17,6 +17,15 @@ function readConfig(): TaiwanSyncConfig {
     const configured = loadTaiwanSyncConfig();
     if (configured) return { ...configured, minIntervalMs: 250, timeoutMs: 10000, maxRetries: 0 };
     if (Object.keys(process.env).some(k => k.startsWith('TAIWAN_MAX_') && process.env[k])) {
+        const keys = ['TAIWAN_MAX_REQUESTS_PER_DAY', 'TAIWAN_MAX_JOBS_PER_DAY',
+            'TAIWAN_MAX_TRANSFER_BYTES_PER_DAY', 'TAIWAN_MAX_STORAGE_BYTES',
+            'TAIWAN_MAX_TRACKED_SECURITIES', 'TAIWAN_MAX_RESPONSE_BYTES'];
+        const missing = keys.filter(k => !process.env[k]?.trim());
+        const invalid = keys.filter(k => {
+            const raw = process.env[k]?.trim();
+            return !!raw && (!/^\d+$/.test(raw) || !Number.isInteger(Number(raw)) || Number(raw) <= 0);
+        });
+        console.warn('[taiwan-data]', { event: 'limits-invalid', missing, invalid });
         throw new TaiwanSourceError('missing-config', 'Invalid Taiwan limits');
     }
     return { autoSyncEnabled: false, historyEnabled: false, maxRequestsPerDay: 200,
@@ -46,13 +55,20 @@ function optionalPersistence(repository: TaiwanRepository): TaiwanRepository {
             return async (...args: unknown[]) => {
                 if (unavailableUntil > Date.now()) throw new TaiwanSourceError('missing-config', 'Cache unavailable');
                 let timer: ReturnType<typeof setTimeout> | undefined;
+                let timedOut = false;
+                const started = Date.now();
                 try {
                     return await Promise.race([
                         Reflect.apply(operation, target, args),
-                        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Cache timeout')), 1500); }),
+                        new Promise<never>((_, reject) => { timer = setTimeout(() => { timedOut = true; reject(new Error('Cache timeout')); }, 1500); }),
                     ]);
                 } catch (error) {
                     unavailableUntil = Date.now() + 60_000;
+                    const code = (error as { code?: unknown } | null)?.code;
+                    // Never print MongoDB messages, connection strings, or environment values.
+                    console.warn('[taiwan-data]', { event: 'cache-failure', operation: String(property),
+                        reason: timedOut ? 'cache-timeout' : error instanceof TaiwanSourceError ? error.reason : 'operation-failed',
+                        code: typeof code === 'number' ? code : undefined, elapsedMs: Date.now() - started });
                     throw error;
                 } finally { if (timer) clearTimeout(timer); }
             };
@@ -83,8 +99,18 @@ export function createTaiwanOnDemand({ repo: repository, request: suppliedReques
         const ongoing = requestsPending.get(key);
         if (ongoing) return ongoing;
         const pending = (async () => {
-            resources ??= suppliedRequest ? undefined : automaticRequest(repo);
-            const value = await (suppliedRequest ?? resources!.request)(url, init);
+            const started = Date.now();
+            let value: unknown;
+            try {
+                resources ??= suppliedRequest ? undefined : automaticRequest(repo);
+                value = await (suppliedRequest ?? resources!.request)(url, init);
+            } catch (error) {
+                const endpoint = new URL(url);
+                console.warn('[taiwan-data]', { event: 'upstream-failure', host: endpoint.host, path: endpoint.pathname,
+                    reason: error instanceof TaiwanSourceError ? error.reason : 'api-error',
+                    status: error instanceof TaiwanSourceError ? error.status : undefined, elapsedMs: Date.now() - started });
+                throw error;
+            }
             requests.set(key, { value, until: now().getTime() + 3600_000 });
             if (requests.size > 8) requests.delete(requests.keys().next().value!);
             return value;

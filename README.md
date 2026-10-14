@@ -399,6 +399,12 @@ npm run taiwan:sync -- --dry-run --catalog --close --details --history --symbols
 
 Only use `--apply` for intentional maintenance after confirming the database target and explicit limits. Normal users do not need to run it. Signed-in access is required for on-demand actions that can trigger upstream work. Source failures return readable status data instead of production-redacted Server Action exceptions.
 
+#### Diagnosing Taiwan loading failures on Vercel
+
+`missing-config` is an application status, not an HTTP status returned by TWSE. The current on-demand loader rejects partial/invalid `TAIWAN_MAX_*` overrides and pauses new requests when its shared MongoDB quota/cache operations fail. All six overrides must be valid together; omit them all to use the documented defaults. A repository operation taking longer than 1.5 seconds also opens a 60-second circuit breaker, so a slow database can surface the same status.
+
+Filter runtime logs by `[taiwan-data]`: `limits-invalid` lists missing/invalid variable names (never values); `cache-failure` identifies the repository operation, elapsed time, and numeric error code; `upstream-failure` identifies the official host/path, status, and application reason. Messages, credentials, response bodies, and query parameters are not logged. Check these events before attributing a failed search to upstream rate limiting; browser HTTP 200 can still carry a failed Server Action result. A successful API probe from a developer machine does not prove connectivity from a Vercel runtime.
+
 Developer experience
 - TypeScript strict mode
 - Tailwind CSS v4 (no separate tailwind.config needed)
