@@ -18,12 +18,11 @@ export async function deduplicateInFlight<T>(key: string, fn: () => Promise<T>):
     }
 
     const promise = (async () => {
-        try {
-            return await fn();
-        } finally {
-            inFlightRequests.delete(key);
-        }
-    })();
+        await Promise.resolve();
+        return await fn();
+    })().finally(() => {
+        inFlightRequests.delete(key);
+    });
 
     inFlightRequests.set(key, promise);
     return promise;
@@ -71,10 +70,15 @@ export async function reserveTaiwanRequestSlot(options?: {
                 { upsert: true, returnDocument: 'after' }
             );
 
-            if (res && typeof res.nextAllowedAt === 'number') {
-                const reservedSlot = res.nextAllowedAt - intervalMs;
-                const waitMs = Math.max(0, reservedSlot - now);
-                return { reservedSlot, waitMs };
+            if (res) {
+                const rawNextAllowed = res.nextAllowedAt != null && typeof res.nextAllowedAt === 'object' && 'toNumber' in res.nextAllowedAt
+                    ? (res.nextAllowedAt as any).toNumber()
+                    : Number(res.nextAllowedAt);
+                if (!Number.isNaN(rawNextAllowed)) {
+                    const reservedSlot = rawNextAllowed - intervalMs;
+                    const waitMs = Math.max(0, reservedSlot - now);
+                    return { reservedSlot, waitMs };
+                }
             }
         }
     } catch {

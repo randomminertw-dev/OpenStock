@@ -49,6 +49,24 @@ describe('Taiwan Global Rate Limiter', () => {
             const res = await deduplicateInFlight('err-key', succeedingFactory);
             expect(res).toBe('recovered');
         });
+
+        it('cleans up in-flight promise if the function throws synchronously', async () => {
+            let count = 0;
+            const syncFailingFactory = () => {
+                count++;
+                throw new Error('sync error');
+            };
+
+            await expect(deduplicateInFlight('sync-err-key', syncFailingFactory as any)).rejects.toThrow('sync error');
+            expect(count).toBe(1);
+
+            // Subsequent call is not stuck and succeeds
+            const succeedingFactory = async () => {
+                return 'recovered after sync throw';
+            };
+            const res = await deduplicateInFlight('sync-err-key', succeedingFactory);
+            expect(res).toBe('recovered after sync throw');
+        });
     });
 
     describe('reserveTaiwanRequestSlot', () => {
@@ -83,6 +101,28 @@ describe('Taiwan Global Rate Limiter', () => {
                 findOneAndUpdate: vi.fn().mockResolvedValue({
                     _id: 'taiwan-official',
                     nextAllowedAt: 1010000,
+                    lastReservedAt: 1000000,
+                }),
+            };
+
+            const res = await reserveTaiwanRequestSlot({
+                intervalMs: 10000,
+                now: 1000000,
+                model: fakeModel as any,
+            });
+
+            expect(fakeModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
+            expect(res.reservedSlot).toBe(1000000);
+            expect(res.waitMs).toBe(0);
+        });
+
+        it('supports BSON Long or object with toNumber() in MongoDB result', async () => {
+            const fakeModel = {
+                findOneAndUpdate: vi.fn().mockResolvedValue({
+                    _id: 'taiwan-official',
+                    nextAllowedAt: {
+                        toNumber: () => 1010000,
+                    },
                     lastReservedAt: 1000000,
                 }),
             };
