@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBudgetedRequest } from './budget';
 import { isTaiwanDatasetEnabled, loadTaiwanSyncConfig } from './config';
+import { resetInMemoryLimiter } from './limiter';
 import { createInMemoryTaiwanRepository } from './repository';
 import { TaiwanSourceError } from './types';
 import type { TaiwanSyncConfig } from './types';
@@ -112,6 +113,10 @@ describe('createBudgetedRequest', () => {
         timeoutMs: 1000,
         maxRetries: 2,
     };
+
+    beforeEach(() => {
+        resetInMemoryLimiter();
+    });
 
     it('denies requests and prevents fetch when budget is exceeded', async () => {
         const repo = createInMemoryTaiwanRepository();
@@ -242,5 +247,53 @@ describe('createBudgetedRequest', () => {
 
         const request = createBudgetedRequest(repo, slowConfig, mockFetch);
         await expect(request('https://api.example.com/slow')).rejects.toThrow();
+    });
+
+    it('serializes requests from multiple budgeted requester instances through the shared limiter', async () => {
+        const repo = createInMemoryTaiwanRepository();
+        const timestamps: number[] = [];
+        const mockFetch = vi.fn().mockImplementation(async () => {
+            timestamps.push(Date.now());
+            return new Response('{"stat":"OK"}', { status: 200 });
+        });
+
+        const config: TaiwanSyncConfig = {
+            ...testConfig,
+            minIntervalMs: 50,
+        };
+
+        const requester1 = createBudgetedRequest(repo, config, mockFetch);
+        const requester2 = createBudgetedRequest(repo, config, mockFetch);
+
+        // Call both concurrently
+        await Promise.all([
+            requester1('https://api.example.com/one'),
+            requester2('https://api.example.com/two'),
+        ]);
+
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(timestamps[1] - timestamps[0]).toBeGreaterThanOrEqual(40);
+    });
+
+    it('deduplicates concurrent in-flight requests for identical URLs across requester instances', async () => {
+        const repo = createInMemoryTaiwanRepository();
+        let callCount = 0;
+        const mockFetch = vi.fn().mockImplementation(async () => {
+            callCount++;
+            await new Promise(resolve => setTimeout(resolve, 20));
+            return new Response('{"stat":"OK"}', { status: 200 });
+        });
+
+        const requester1 = createBudgetedRequest(repo, testConfig, mockFetch);
+        const requester2 = createBudgetedRequest(repo, testConfig, mockFetch);
+
+        const [res1, res2] = await Promise.all([
+            requester1('https://api.example.com/same-url'),
+            requester2('https://api.example.com/same-url'),
+        ]);
+
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+        expect(res1).toEqual({ stat: 'OK' });
+        expect(res2).toEqual({ stat: 'OK' });
     });
 });

@@ -6,6 +6,7 @@ import {
     type TaiwanUsageAmounts,
     type TaiwanUsageLimits,
 } from './types';
+import { withTaiwanRateLimit } from './limiter';
 
 /**
  * Returns current date string in Asia/Taipei timezone (YYYY-MM-DD).
@@ -33,7 +34,7 @@ export function createBudgetedRequest(
 
     async function executeWithQueue<T>(fn: () => Promise<T>): Promise<T> {
         const nextInQueue = queue.then(async () => {
-            const minInterval = config.minIntervalMs ?? 2000;
+            const minInterval = config.minIntervalMs ?? 10000;
             const now = Date.now();
             const elapsed = now - lastRequestEnd;
             if (elapsed < minInterval) {
@@ -50,9 +51,13 @@ export function createBudgetedRequest(
     }
 
     return async function budgetedRequest(url: string, init?: RequestInit): Promise<unknown> {
-        return executeWithQueue(async () => {
-            const maxRetries = config.maxRetries ?? 2;
-            let attempt = 0;
+        const minInterval = config.minIntervalMs ?? 10000;
+        return withTaiwanRateLimit(
+            url,
+            async () => {
+                return executeWithQueue(async () => {
+                    const maxRetries = config.maxRetries ?? 2;
+                    let attempt = 0;
 
             while (true) {
                 const day = getTaipeiDayString();
@@ -133,7 +138,7 @@ export function createBudgetedRequest(
 
                         if (attempt < maxRetries) {
                             attempt++;
-                            const minInterval = config.minIntervalMs ?? 2000;
+                            const minInterval = config.minIntervalMs ?? 10000;
                             await new Promise(resolve => setTimeout(resolve, minInterval));
                             continue;
                         }
@@ -249,5 +254,6 @@ export function createBudgetedRequest(
                 }
             }
         });
-    };
+    }, { intervalMs: minInterval });
+};
 }
