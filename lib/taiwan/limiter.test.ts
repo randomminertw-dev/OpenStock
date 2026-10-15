@@ -57,7 +57,7 @@ describe('Taiwan Global Rate Limiter', () => {
                 throw new Error('sync error');
             };
 
-            await expect(deduplicateInFlight('sync-err-key', syncFailingFactory as any)).rejects.toThrow('sync error');
+            await expect(deduplicateInFlight('sync-err-key', syncFailingFactory as unknown as () => Promise<string>)).rejects.toThrow('sync error');
             expect(count).toBe(1);
 
             // Subsequent call is not stuck and succeeds
@@ -108,7 +108,7 @@ describe('Taiwan Global Rate Limiter', () => {
             const res = await reserveTaiwanRequestSlot({
                 intervalMs: 10000,
                 now: 1000000,
-                model: fakeModel as any,
+                model: fakeModel as unknown as NonNullable<Parameters<typeof reserveTaiwanRequestSlot>[0]>['model'],
             });
 
             expect(fakeModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
@@ -130,7 +130,7 @@ describe('Taiwan Global Rate Limiter', () => {
             const res = await reserveTaiwanRequestSlot({
                 intervalMs: 10000,
                 now: 1000000,
-                model: fakeModel as any,
+                model: fakeModel as unknown as NonNullable<Parameters<typeof reserveTaiwanRequestSlot>[0]>['model'],
             });
 
             expect(fakeModel.findOneAndUpdate).toHaveBeenCalledTimes(1);
@@ -146,7 +146,7 @@ describe('Taiwan Global Rate Limiter', () => {
             const res = await reserveTaiwanRequestSlot({
                 intervalMs: 10000,
                 now: 1000000,
-                model: fakeModel as any,
+                model: fakeModel as unknown as NonNullable<Parameters<typeof reserveTaiwanRequestSlot>[0]>['model'],
             });
 
             expect(res.reservedSlot).toBe(1000000);

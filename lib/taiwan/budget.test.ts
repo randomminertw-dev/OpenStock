@@ -293,6 +293,7 @@ describe('createBudgetedRequest', () => {
         ]);
 
         expect(mockFetch).toHaveBeenCalledTimes(1);
+        expect(callCount).toBe(1);
         expect(res1).toEqual({ stat: 'OK' });
         expect(res2).toEqual({ stat: 'OK' });
     });

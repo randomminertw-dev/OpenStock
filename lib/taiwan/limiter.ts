@@ -44,7 +44,8 @@ export async function reserveTaiwanRequestSlot(options?: {
     const model = options?.model ?? TaiwanRateLimitModel;
 
     try {
-        const isConnected = (model as any)?.db ? (model as any).db.readyState === 1 : true;
+        const dbObj = (model as unknown as { db?: { readyState?: number } })?.db;
+        const isConnected = dbObj ? dbObj.readyState === 1 : true;
         if (isConnected && model && typeof model.findOneAndUpdate === 'function') {
             const res = await model.findOneAndUpdate(
                 { _id: scope },
@@ -71,9 +72,10 @@ export async function reserveTaiwanRequestSlot(options?: {
             );
 
             if (res) {
-                const rawNextAllowed = res.nextAllowedAt != null && typeof res.nextAllowedAt === 'object' && 'toNumber' in res.nextAllowedAt
-                    ? (res.nextAllowedAt as any).toNumber()
-                    : Number(res.nextAllowedAt);
+                const nextVal = res.nextAllowedAt;
+                const rawNextAllowed = nextVal != null && typeof nextVal === 'object' && 'toNumber' in (nextVal as object)
+                    ? (nextVal as { toNumber: () => number }).toNumber()
+                    : Number(nextVal);
                 if (!Number.isNaN(rawNextAllowed)) {
                     const reservedSlot = rawNextAllowed - intervalMs;
                     const waitMs = Math.max(0, reservedSlot - now);

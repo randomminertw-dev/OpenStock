@@ -52,8 +52,9 @@ export function createBudgetedRequest(
 
     return async function budgetedRequest(url: string, init?: RequestInit): Promise<unknown> {
         const minInterval = config.minIntervalMs ?? 10000;
+        const requestKey = `${init?.method ?? 'GET'}:${url}`;
         return withTaiwanRateLimit(
-            url,
+            requestKey,
             async () => {
                 return executeWithQueue(async () => {
                     const maxRetries = config.maxRetries ?? 2;
