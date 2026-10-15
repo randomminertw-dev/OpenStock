@@ -10,6 +10,7 @@ let warning: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
     limitKeys.forEach(k => vi.stubEnv(k, ''));
+    vi.stubEnv('TAIWAN_UPSTREAM_MIN_INTERVAL_MS', '0');
     warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });

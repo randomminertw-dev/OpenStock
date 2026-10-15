@@ -222,6 +222,9 @@ TAIWAN_CANDLE_PROVIDER=official
 TAIWAN_AUTO_SYNC_ENABLED=false
 TAIWAN_HISTORY_ENABLED=false
 
+# Upstream rate limit pacing interval (default: 10000ms / 10s for TWSE & TPEx; set to 0 in tests)
+TAIWAN_UPSTREAM_MIN_INTERVAL_MS=10000
+
 # Optional on-demand budget overrides (set all six together); scheduled/CLI sync requires explicit limits
 TAIWAN_MAX_REQUESTS_PER_DAY=200
 TAIWAN_MAX_JOBS_PER_DAY=100
@@ -328,6 +331,7 @@ public/assets/images/   # logos and screenshots
     - Exact shares volume: Volume represents exact trading shares (`成交股數`), not lots (張) multiplied by 1,000.
     - Price basis & freshness: Unadjusted prices in the Asia/Taipei timezone. OpenAPI snapshots are flagged `complete: false`; verified after-trading historical bars are flagged `complete: true`. No synthetic bars are fabricated for halted or non-trading days.
     - Zero-cost architecture & Free sync quotas: Public endpoints with zero API fees. Network requests, transfer bytes, jobs, and storage are strictly bounded by atomic daily budgets in MongoDB. On-demand reads work automatically with conservative default limits; optional background jobs remain disabled by default (`TAIWAN_AUTO_SYNC_ENABLED=false`, `TAIWAN_HISTORY_ENABLED=false`).
+    - Rate limiting & Burst prevention: All official TWSE and TPEx requests share a global 10-second pacing gatekeeper (default 10,000ms). Across distributed serverless instances, requests atomically reserve forward time slots using MongoDB Pipeline Updates (`findOneAndUpdate` with `$max` and `$add` on `nextAllowedAt`) to eliminate burst traffic and comply with TWSE / TPEx fair usage policies. Concurrent in-flight requests for identical URLs are deduplicated across callers. The minimum interval can be customized via the `TAIWAN_UPSTREAM_MIN_INTERVAL_MS` environment variable (default: `10000`, set to `0` in tests for fast execution).
     - Rollback flag: `TAIWAN_CANDLE_PROVIDER=official|finmind` (default: `official`). When set to `finmind`, daily candles and technical indicators fall back to the FinMind provider.
     - TradingView intraday scope: The TradingView embeddable widgets provide intraday chart and quote views (subject to TradingView's available data feeds); the native SVG charts, 57 technical indicators, and four-factor scores use official EOD daily bars stored in MongoDB.
 
@@ -386,6 +390,7 @@ Package scripts
 Deploy with the website's existing MongoDB configuration. Searching `2330` or `0050` automatically retrieves and caches the official stock/ETF catalog when it is missing; there is no required `--catalog` initialization or extra API key. Opening a Taiwan stock page automatically loads recent confirmed daily bars and applicable stock/fund information. Optional background sync flags can remain false.
 
 Known-code/name lookups first query matching persisted instruments, without downloading the full market catalog or reserving upstream quota. This works across serverless restarts even if history has exhausted its daily allowance. A missing instrument can trigger the existing official bootstrap/refresh; its full-catalog cache lasts 24 hours. Persisted lookup results can be older than this refresh cache and are not represented as newly refreshed. Shared requests and Next.js data caching reduce repeated upstream downloads, and MongoDB stores results for later instances. Failed updates preserve usable cached data. If the shared quota ledger cannot be read, new upstream work pauses instead of allocating a separate per-instance allowance.
+臺灣官方端點（TWSE 與 TPEx）共用全域 10 秒速率限制門禁（預設 10,000ms）。跨實例採用 MongoDB Pipeline Update 原子預約時間槽，徹底防範 Burst Traffic。可透過環境變數 `TAIWAN_UPSTREAM_MIN_INTERVAL_MS` 自訂間隔（預設 10000；單元與整合測試環境可設為 0 加速執行）。
 
 Long history progresses two official periods per request. The page polls while visible and refreshes charts/indicators as more bars arrive. Listed history uses monthly periods; OTC history uses daily batches to preserve exact shares and the same trading scope. Progress is stored by period identity so day/month boundaries and serverless restarts do not lose work. Completed history refreshes only recent periods, rather than downloading the whole range again. Current-day bars are conservatively excluded before 18:00 Taipei time; the displayed date always identifies the available completed session.
 

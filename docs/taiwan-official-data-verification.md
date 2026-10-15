@@ -43,6 +43,9 @@ TAIWAN_HISTORY_ENABLED=false
 # 來源切換旗標（預設 official；可設定 finmind 進行緊急回退）
 TAIWAN_CANDLE_PROVIDER=official
 
+# 官方請求速率限制間隔（毫秒，預設 10000 即 10 秒門禁；測試環境可設為 0）
+TAIWAN_UPSTREAM_MIN_INTERVAL_MS=10000
+
 # 嚴格正整數預算限制（任一缺漏或非正整數，系統即安全停用背景同步）
 TAIWAN_MAX_REQUESTS_PER_DAY=200
 TAIWAN_MAX_JOBS_PER_DAY=50
@@ -54,6 +57,13 @@ TAIWAN_MAX_RESPONSE_BYTES=15728640           # 15 MB
 - **驗證要點**：
   1. 所有 `TAIWAN_MAX_*` 必須為明確之正整數。
   2. 若無設定或設為 0 / 負數，系統回傳 `missing-config` 或 `disabled`，絕不自動升級付費方案或超額抓取。
+  3. 可透過環境變數 `TAIWAN_UPSTREAM_MIN_INTERVAL_MS` 自訂間隔（預設 10000，未設定時維持預設 10 秒）。
+
+### 流量控制與配額保護機制（Rate Limiting & Free Quota Protection）
+- **全域 10 秒速率限制門禁**：臺灣官方端點（TWSE 與 TPEx）共用全域 10 秒速率限制門禁（預設 10,000ms），符合證交所與櫃買中心反爬蟲規範與公眾公平使用原則。
+- **跨實例原子預約時間槽**：多個 Serverless 實例或同時發出的請求，跨實例採用 MongoDB Pipeline Update 原子預約時間槽（`TaiwanRateLimit` 集合之 `$max` / `$add` aggregation pipeline），將請求均勻間隔拉開，徹底防範突發流量（Burst Traffic）。
+- **In-Flight 請求去重（Deduplication）**：同實例內相同 URL 之並發請求自動合併單一連線，避免重複消耗外部額度與頻寬。
+- **自訂間隔變數**：可透過環境變數 `TAIWAN_UPSTREAM_MIN_INTERVAL_MS` 自訂間隔（預設 10000；測試環境可設為 0 加速執行）。
 
 ### 步驟二：CLI Dry-Run 檢視與指定範圍同步（Dry-Run and Specified Scope Sync）
 使用本機 CLI 檢查同步計畫，不存取資料庫亦不發送任何外部網路請求：

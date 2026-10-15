@@ -33,4 +33,12 @@ describe('TaiwanSyncConfig rate limiting configuration', () => {
         });
         expect(config?.minIntervalMs).toBe(10000);
     });
+
+    it('allows 0ms min interval for fast testing environments', () => {
+        const config = loadTaiwanSyncConfig({
+            ...baseEnv,
+            TAIWAN_UPSTREAM_MIN_INTERVAL_MS: '0',
+        });
+        expect(config?.minIntervalMs).toBe(0);
+    });
 });

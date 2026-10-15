@@ -28,10 +28,13 @@ function readConfig(): TaiwanSyncConfig {
         console.warn('[taiwan-data]', { event: 'limits-invalid', missing, invalid });
         throw new TaiwanSourceError('missing-config', 'Invalid Taiwan limits');
     }
+    const rawMinInterval = typeof process.env.TAIWAN_UPSTREAM_MIN_INTERVAL_MS === 'string' && /^\d+$/.test(process.env.TAIWAN_UPSTREAM_MIN_INTERVAL_MS.trim())
+        ? Number(process.env.TAIWAN_UPSTREAM_MIN_INTERVAL_MS.trim())
+        : 10000;
     return { autoSyncEnabled: false, historyEnabled: false, maxRequestsPerDay: 200,
         maxJobsPerDay: 100, maxTransferBytesPerDay: 100 * 1024 * 1024,
         maxStorageBytes: 10 * 1024 * 1024, maxTrackedSecurities: 20,
-        maxResponseBytes: 10 * 1024 * 1024, minIntervalMs: 10000, timeoutMs: 10000, maxRetries: 0 };
+        maxResponseBytes: 10 * 1024 * 1024, minIntervalMs: rawMinInterval, timeoutMs: 10000, maxRetries: 0 };
 }
 
 export { readConfig as readTaiwanOnDemandConfig };

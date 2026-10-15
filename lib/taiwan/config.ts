@@ -18,6 +18,15 @@ function parsePositiveInteger(raw: string | undefined): number | null {
     return num;
 }
 
+function parseNonNegativeInteger(raw: string | undefined): number | null {
+    if (!raw || typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    if (!/^\d+$/.test(trimmed)) return null;
+    const num = Number(trimmed);
+    if (!Number.isInteger(num) || num < 0) return null;
+    return num;
+}
+
 /**
  * Loads and validates Taiwan synchronization configuration from environment variables.
  * Returns null if any required quota/limit is missing, zero, negative, non-integer, or NaN.
@@ -46,8 +55,8 @@ export function loadTaiwanSyncConfig(
     const autoSyncEnabled = env.TAIWAN_AUTO_SYNC_ENABLED === 'true';
     const historyEnabled = env.TAIWAN_HISTORY_ENABLED === 'true';
 
-    const rawMinInterval = parsePositiveInteger(env.TAIWAN_UPSTREAM_MIN_INTERVAL_MS);
-    const minIntervalMs = rawMinInterval !== null && rawMinInterval >= 1000 ? rawMinInterval : 10000;
+    const rawMinInterval = parseNonNegativeInteger(env.TAIWAN_UPSTREAM_MIN_INTERVAL_MS);
+    const minIntervalMs = rawMinInterval !== null ? rawMinInterval : 10000;
 
     return {
         autoSyncEnabled,

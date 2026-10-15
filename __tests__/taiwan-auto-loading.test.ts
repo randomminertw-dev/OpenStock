@@ -32,6 +32,7 @@ beforeEach(async () => {
     vi.stubGlobal('fetch', officialFetch);
     vi.stubEnv('TAIWAN_HISTORY_ENABLED', 'false');
     vi.stubEnv('TAIWAN_AUTO_SYNC_ENABLED', 'false');
+    vi.stubEnv('TAIWAN_UPSTREAM_MIN_INTERVAL_MS', '0');
     vi.stubEnv('FINNHUB_API_KEY', '');
     vi.stubEnv('FINNHUB_API_KEYS', '');
     vi.stubEnv('NEXT_PUBLIC_FINNHUB_API_KEY', '');
