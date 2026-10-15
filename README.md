@@ -453,3 +453,14 @@ This project is a modified fork of [OpenStock](https://github.com/Open-Dev-Socie
 - 規則與 ATR% 風險門檻尚未經預測回測校準；不提供勝率、上漲機率或保證目標價。沒有新增 LLM、VM、排程或付費服務；按需讀取與保存仍會使用既有行情及 MongoDB／Vercel 額度。
 
 實作位置：`lib/analysis/`、`lib/actions/research-report.actions.ts`、`components/stocks/ResearchReportPanel.tsx`。本機驗證：`npx vitest run lib/analysis lib/actions/research-report.actions.test.ts __tests__/research-report-ui.test.tsx`。
+
+
+### 後續 Oracle VM 與基本報告保底
+
+已確認保留目前 Next.js TypeScript 規則報告，未來以 Oracle VM Python 執行進階分析。兩條路徑共用既有指標引擎輸出的版本化快照；Python 不重寫指標。VM 導入後，網站建立非同步研究請求並查詢狀態，VM 不可用時允許 Next.js 產生基本報告，清楚標示能力與資料日期。基本／進階報告須分開版本識別與去重，並以租約及原子發布避免遲到覆寫。行情與 MongoDB 仍是共同依賴。
+
+目前已提供 VM worker、同快照工作佇列、狀態查詢與基本報告保底的程式；尚未安裝到真實 VM 或驗證正式模型。詳細決議見 `docs/RandomInvestigation 第一版自動研究報告（MVP）建議書.md` 第九節。
+
+### Oracle VM Python 專案與一鍵安裝
+
+VM 程式已移至獨立 `openstock-research-worker` 倉庫，分工與完整部署指南入口見 [VM_DEPLOYMENT.md](VM_DEPLOYMENT.md)。Ubuntu26.04 ARM、2 CPU／12GB，提供 `install.sh`、非root worker、資料準備、訓練、獨立校準、受控promotion與status。大量特徵以Node CLI共用TS引擎；股票20交易日、crypto30UTC日。預設 `RESEARCH_VM_ENABLED` 關閉；啟用後網站先保存基本報告，再排VM進階工作，失敗維持基本分析。未合格模型不顯示機率；台股缺調整價時阻擋正式訓練，無新增官方爬蟲、無自動部署或付費資源。

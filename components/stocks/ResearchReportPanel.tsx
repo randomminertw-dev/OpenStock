@@ -4,9 +4,11 @@ import { FileText, Loader2, Download } from 'lucide-react';
 import { generateResearchReport, getResearchReports } from '@/lib/actions/research-report.actions';
 import type { PublishedResearchReport } from '@/lib/analysis/types';
 import { mergeReportHistory } from '@/lib/analysis/history';
+import VmResearchStatus from './VmResearchStatus';
 import ResearchReportView from './ResearchReportView';
 
 export default function ResearchReportPanel({ symbol }: { symbol: string }) {
+    const [vmJobs, setVmJobs] = useState<Record<string,string>>({});
     const [reports, setReports] = useState<PublishedResearchReport[]>([]);
     const [selected, setSelected] = useState('');
     const [loadedFor, setLoadedFor] = useState(symbol);
@@ -40,7 +42,8 @@ export default function ResearchReportPanel({ symbol }: { symbol: string }) {
             if (result.ok) {
                 setReports(previous => mergeReportHistory(previous, result.report));
                 setSelected(result.report.id); setLoadedFor(symbol);
-                setNotice(result.reused ? '資料與參數未變，沿用已保存的報告。' : '研究報告已完整保存。');
+                if (result.vmJobId) setVmJobs(previous => ({ ...previous, [result.report.id]: result.vmJobId! }));
+                setNotice(result.vmMessage ?? (result.reused ? '資料與參數未變，沿用已保存的報告。' : '研究報告已完整保存。'));
             } else setError(result.message);
         } catch { if (request === sequence.current) setError('報告產生失敗，既有報告仍可閱讀，請稍後重試。'); }
         finally { if (request === sequence.current) setGenerating(false); }
@@ -70,7 +73,7 @@ export default function ResearchReportPanel({ symbol }: { symbol: string }) {
                         {visible.map(r => <option key={r.id} value={r.id}>{r.snapshot.dataDate} · {new Date(r.publishedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false })}</option>)}
                     </select></label>
                     <button type="button" className="inline-flex items-center gap-1.5 text-xs text-faint hover:text-foreground" onClick={download}><Download className="size-3.5" />下載 Markdown</button>
-                </div><ResearchReportView report={report} />
+                </div><VmResearchStatus key={report.id} report={report} jobId={vmJobs[report.id]} /><ResearchReportView report={report} />
             </>}
         </div>
     </section>;

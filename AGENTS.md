@@ -57,3 +57,6 @@ Vitest 使用 Node 環境；測試檔命名為 `*.test.ts`，放在模組旁或 
 - 2026-10-14：0/251/502/753 ms 的 missing-config 請求序列符合資料庫保護阻擋，非官方 HTTP 限流證據。修正全域快取熔斷為各操作獨立：readCatalog 失敗不可封鎖健康的 reserveUsage；額度帳本失敗仍禁止外部請求。cache-blocked 保留 cause/code，通用資料庫錯誤不改標 missing-config；正式站最初失敗操作仍待日誌驗收。
 - 2026-10-14：正式站 budget-limit 無 HTTP status 是應用每日限制；535 根 K／26/27 批次不代表名錄搜尋可用。搜尋與商品解析先依 query 讀取持久名錄，不下載全市場或消耗外部額度；全表／條件查詢分開保護，部分結果不當作完整市場快取。未快取商品保留 catalog-budget-limit 提示，不提高額度；加入 watchlist 與搜尋失敗的因果未確認。
 - 2026-10-15：新增按需規則式研究報告；日 K 視窗固定最後完整交易日，報告 hash 含實際計算視窗；版本限同標的，發布以 MongoDB transaction 同時驗租約並保存，過期 worker 不得發布。無手動初始化、無新增付費服務；未 push/deploy。
+- 2026-10-15：使用者確認保留 Next.js 規則報告作未來 VM 失效的基本保底；Oracle Python 只讀既有 TS 引擎的一致快照，基本／進階報告須區分來源、版本與能力。VM 與自動切換尚未實作，決議見 MVP 建議書第九節。
+- 2026-10-15：VM Python管線共用TS歷史快照；股票20交易日／crypto30日，模型需要校準及明確promotion。VM jobs以owner/token/deadline CAS發布，Next先提供基本報告；台股DB t轉秒、testLabelEnd阻擋歷史洩漏、調整來源納契約。未部署ARM或正式Atlas。
+- 2026-10-15：VM runtime移至同層獨立openstock-research-worker Git倉庫；網站保留TS單一來源與export-engine工具。VM只用帶manifest／鎖定runtime依賴的engine產物，更新VM不觸發Vercel；未建立遠端或部署。

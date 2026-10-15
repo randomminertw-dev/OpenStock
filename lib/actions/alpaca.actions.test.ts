@@ -3,6 +3,7 @@ import {
     getAlpacaStockBars,
     getAlpacaCryptoBars,
     getDailyCandles,
+    getDailyCandlesWithReason,
     __resetAlpacaBarsCacheForTests,
     __resetCryptoPairCacheForTests,
 } from './alpaca.actions';
@@ -435,4 +436,13 @@ describe('getDailyCandles', () => {
         expect(await getDailyCandles('CG:', 30)).toBeNull();
         expect(fetchMock).not.toHaveBeenCalled();
     });
+});
+
+it('declares raw stock prices consistently for VM feature contracts', async()=>{
+    __resetAlpacaBarsCacheForTests();
+    vi.stubEnv('ALPACA_API_KEY','test-key');vi.stubEnv('ALPACA_API_SECRET','test-secret');
+    global.fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>({bars:[{t:'2026-10-01T04:00:00Z',o:100,h:102,l:99,c:101,v:1000}]})});
+    const result=await getDailyCandlesWithReason('AAPL',400);
+    expect(result.source?.priceBasis).toBe('unadjusted');
+    expect(new URL((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).searchParams.get('adjustment')).toBe('raw');
 });

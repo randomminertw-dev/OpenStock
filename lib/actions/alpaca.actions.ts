@@ -28,7 +28,7 @@ export async function __resetCryptoPairCacheForTests(): Promise<void> {
 type AlpacaBar = { t?: string; o?: number; h?: number; l?: number; c?: number; v?: number };
 
 async function alpacaBars(symbol: string, days: number, crypto: boolean, interval: CryptoInterval = '1d'): Promise<CandleResult> {
-    const source: CandleSource = { provider: 'alpaca', symbol, timeZone: crypto ? 'UTC' : 'America/New_York' };
+    const source: CandleSource = { provider: 'alpaca', symbol, timeZone: crypto ? 'UTC' : 'America/New_York', ...(crypto ? {} : { priceBasis: 'unadjusted' as const }) };
     const key = process.env.ALPACA_API_KEY?.trim();
     const secret = process.env.ALPACA_API_SECRET?.trim();
     if (!key || !secret) return failure('missing-config', source);
@@ -39,7 +39,7 @@ async function alpacaBars(symbol: string, days: number, crypto: boolean, interva
             : Math.floor(end.getTime() / duration) * duration - 550 * duration);
         const path = crypto ? '/v1beta3/crypto/us/bars' : `/v2/stocks/${encodeURIComponent(symbol)}/bars`;
         const query = new URLSearchParams({
-            ...(crypto ? { symbols: symbol } : { feed: 'iex' }),
+            ...(crypto ? { symbols: symbol } : { feed: 'iex', adjustment: 'raw' }),
             timeframe: interval === '1d' ? '1Day' : { '4h': '4Hour', '8h': '8Hour', '12h': '12Hour' }[interval],
             start: start.toISOString(), end: end.toISOString(), limit: '1000', sort: 'asc',
         });

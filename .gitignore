@@ -46,3 +46,7 @@ AGENTS.md
 
 docs/
 /.taiwan-sync/
+/.research-node/
+__pycache__/
+*.pyc
+VM_DEPLOYMENT.md

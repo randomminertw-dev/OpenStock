@@ -35,5 +35,5 @@ export interface PublishedResearchReport {
     id: string; snapshot: ResearchSnapshot; analysis: ResearchAnalysis; markdown: string; publishedAt: string;
 }
 export type ResearchErrorCode = 'unauthorized' | 'unsupported-symbol' | 'busy' | 'no-data' | 'api-error' | 'persistence-error';
-export type ResearchGenerationResult = { ok: true; report: PublishedResearchReport; reused: boolean }
+export type ResearchGenerationResult = { ok: true; report: PublishedResearchReport; reused: boolean; vmJobId?: string; vmMessage?: string }
     | { ok: false; code: ResearchErrorCode; message: string };

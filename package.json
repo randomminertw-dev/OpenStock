@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "taiwan:build-sync": "node scripts/build-taiwan-sync.mjs",
-    "taiwan:sync": "node scripts/sync-taiwan.mjs"
+    "taiwan:sync": "node scripts/sync-taiwan.mjs",
+    "research:build-node": "node scripts/build-research-node.mjs",
+    "research:export-engine": "node scripts/export-research-engine.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",
