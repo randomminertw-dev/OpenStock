@@ -15,7 +15,7 @@ const loaders = new WeakMap<TaiwanRepository, ReturnType<typeof createTaiwanOnDe
 /** Conservative defaults apply to on-screen reads; scheduled jobs remain opt-in. */
 function readConfig(): TaiwanSyncConfig {
     const configured = loadTaiwanSyncConfig();
-    if (configured) return { ...configured, minIntervalMs: 250, timeoutMs: 10000, maxRetries: 0 };
+    if (configured) return { ...configured, timeoutMs: 10000, maxRetries: 0 };
     if (Object.keys(process.env).some(k => k.startsWith('TAIWAN_MAX_') && process.env[k])) {
         const keys = ['TAIWAN_MAX_REQUESTS_PER_DAY', 'TAIWAN_MAX_JOBS_PER_DAY',
             'TAIWAN_MAX_TRANSFER_BYTES_PER_DAY', 'TAIWAN_MAX_STORAGE_BYTES',
@@ -31,8 +31,10 @@ function readConfig(): TaiwanSyncConfig {
     return { autoSyncEnabled: false, historyEnabled: false, maxRequestsPerDay: 200,
         maxJobsPerDay: 100, maxTransferBytesPerDay: 100 * 1024 * 1024,
         maxStorageBytes: 10 * 1024 * 1024, maxTrackedSecurities: 20,
-        maxResponseBytes: 10 * 1024 * 1024, minIntervalMs: 250, timeoutMs: 10000, maxRetries: 0 };
+        maxResponseBytes: 10 * 1024 * 1024, minIntervalMs: 10000, timeoutMs: 10000, maxRetries: 0 };
 }
+
+export { readConfig as readTaiwanOnDemandConfig };
 
 function automaticRequest(repo: TaiwanRepository) {
     const config = readConfig();

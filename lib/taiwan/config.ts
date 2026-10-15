@@ -46,6 +46,9 @@ export function loadTaiwanSyncConfig(
     const autoSyncEnabled = env.TAIWAN_AUTO_SYNC_ENABLED === 'true';
     const historyEnabled = env.TAIWAN_HISTORY_ENABLED === 'true';
 
+    const rawMinInterval = parsePositiveInteger(env.TAIWAN_UPSTREAM_MIN_INTERVAL_MS);
+    const minIntervalMs = rawMinInterval !== null && rawMinInterval >= 1000 ? rawMinInterval : 10000;
+
     return {
         autoSyncEnabled,
         historyEnabled,
@@ -56,7 +59,7 @@ export function loadTaiwanSyncConfig(
         maxTrackedSecurities,
         maxResponseBytes,
         upstreamConcurrency: 1,
-        minIntervalMs: 2000,
+        minIntervalMs,
         timeoutMs: 10000,
         maxRetries: 2,
     };

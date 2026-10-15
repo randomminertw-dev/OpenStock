@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildTaiwanCatalog } from './catalog';
 import { createInMemoryTaiwanRepository } from './repository';
-import { createTaiwanOnDemand } from './on-demand';
+import { createTaiwanOnDemand, readTaiwanOnDemandConfig } from './on-demand';
 import type { TaiwanRequester } from './types';
 import { TaiwanSourceError } from './types';
 
@@ -166,4 +166,10 @@ describe('automatic official Taiwan loading', () => {
         expect(refreshed.status.state).toBe('ready');
         expect(request.mock.calls.length - before).toBe(1);
     });
+
+    it('does not override minIntervalMs to 250ms and respects official 10s default', () => {
+        const config = readTaiwanOnDemandConfig();
+        expect(config.minIntervalMs).toBe(10000);
+    });
 });
+
